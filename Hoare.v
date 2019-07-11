@@ -1,49 +1,6 @@
 Require Import Coq.Lists.List.
 Require Import AST.
 
-(** Denotational Semantics *)
-Inductive ceval : func_context -> com -> state -> state -> Prop :=
-  | E_Skip : forall fc st,
-      ceval fc CSkip st st
-  | E_Ass : forall fc st X a n,
-      aeval st a = n ->
-      ceval fc (CAss X a) st (update_state st X n)
-  | E_Seq : forall fc c1 c2 st1 st2 st3,
-      ceval fc c1 st1 st2 ->
-      ceval fc c2 st2 st3 ->
-      ceval fc (CSeq c1 c2) st1 st3
-  | E_IfTrue : forall fc b c1 c2 st1 st2,
-      beval st1 b = true ->
-      ceval fc c1 st1 st2 ->
-      ceval fc (CIf b c1 c2) st1 st2
-  | E_IfFalse : forall fc b c1 c2 st1 st2,
-      beval st1 b = false ->
-      ceval fc c2 st1 st2 ->
-      ceval fc (CIf b c1 c2) st1 st2
-  | E_WhileFalse : forall fc b c st,
-      beval st b = false ->
-      ceval fc (CWhile b c) st st
-  | E_WhileTrue : forall fc b c st1 st2 st3,
-      beval st1 b = true ->
-      ceval fc c st1 st2 ->
-      ceval fc (CWhile b c) st2 st3 ->
-      ceval fc (CWhile b c) st1 st3
-  | E_Call : forall fc f pv loc1 glb1 glb2,
-      (exists loc2,
-        ceval fc (snd (fc f)) ((param_to_local_state (loc1, glb1) (fst (fc f)) pv), glb1) (loc2, glb2)) ->
-      ceval fc (CCall f pv) (loc1, glb1) (loc1, glb2)
-  | E_Reentry : forall fc lf loc glb1 glb2,
-      arbitrary_eval fc lf loc glb1 glb2 ->
-      ceval fc (CReentry lf) (loc, glb1) (loc, glb2)
-with arbitrary_eval: forall (fc: func_context) (lf: list func) (loc : unit_state), unit_state -> unit_state -> Prop :=
-  | ArE_nil: forall fc lf loc gl, arbitrary_eval fc lf loc gl gl
-  | ArE_cons: forall fc lf loc gl1 gl2 gl3 f pv,
-                In f lf ->
-                ceval fc (CCall f (map (fun v => ANum v) pv)) (loc, gl1) (loc, gl2) ->
-                arbitrary_eval fc lf loc gl2 gl3 ->
-                arbitrary_eval fc lf loc gl1 gl3.
-(** [] *)
-
 Definition Assertion := state -> Prop.
 
 Definition derives (P Q: Assertion): Prop :=

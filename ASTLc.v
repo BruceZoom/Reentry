@@ -1,9 +1,6 @@
 Require Import Coq.Lists.List.
 Require Import AST.
 
-Open Scope list_scope.
-Import ListNotations.
-
 Definition label : Type := nat.
 
 Inductive com' : Type :=
@@ -16,18 +13,6 @@ Inductive com' : Type :=
   | CReentry' (l1 l2 : label) (lf : list func)
   | CReentryCall (l1 l2 : label) (f : func)
 .
-
-Fixpoint com'_to_com (c' : com') : com :=
-  match c' with
-  | CSkip' _ _ => CSkip
-  | CAss' _ _ X a => CAss X a
-  | CSeq' c1' c2' => CSeq (com'_to_com c1') (com'_to_com c2')
-  | CIf' _ _ b c1' c2' => CIf b (com'_to_com c1') (com'_to_com c2')
-  | CWhile' _ _ b c' => CWhile b (com'_to_com c')
-  | CCall' _ _ f pv => CCall f pv
-  | CReentry' _ _ lf => CReentry lf
-  | _ => CSkip
-  end.
 
 Fixpoint get_entry_label (c' : com') : label :=
   match c' with
@@ -55,8 +40,10 @@ Fixpoint get_exit_label (c' : com') : label :=
 
 Inductive valid_com_label : com' -> Prop :=
   | V_Skip' : forall l1 l2,
+      l1 <> l2 ->
       valid_com_label (CSkip' l1 l2)
   | V_Ass' : forall l1 l2 X a,
+      l1 <> l2 ->
       valid_com_label (CAss' l1 l2 X a)
   | V_Seq' : forall c1' c2',
       valid_com_label c1' ->
@@ -64,19 +51,29 @@ Inductive valid_com_label : com' -> Prop :=
       get_exit_label c1' = get_entry_label c2' ->
       valid_com_label (CSeq' c1' c2')
   | V_If' : forall l1 l2 b c1' c2',
+      l1 <> l2 ->
       valid_com_label c1' ->
       valid_com_label c2' ->
       valid_com_label (CIf' l1 l2 b c1' c2')
   | V_While' : forall l1 l2 b c',
+      l1 <> l2 ->
       valid_com_label c' ->
       valid_com_label (CWhile' l1 l2 b c')
   | V_Call' : forall l1 l2 f pv,
+      l1 <> l2 ->
       valid_com_label (CCall' l1 l2 f pv)
   | V_Reentry' : forall l1 l2 lf,
+      l1 <> l2 ->
       valid_com_label (CReentry' l1 l2 lf)
   | V_ReentryCall : forall l1 l2 f,
+      l1 <> l2 ->
       valid_com_label (CReentryCall l1 l2 f)
 .
+
+Lemma valid_label_no_loop : forall c',
+  valid_com_label c' -> (get_entry_label c') <> (get_exit_label c').
+Proof.
+Admitted.
 
 Definition func_context' : Type := func -> (list ident) * com' * label.
 
@@ -85,11 +82,14 @@ Definition label_context : Type := label -> com'.
 Definition label_func'_context_match (lbc : label_context) (fc' : func_context') : Prop :=
   forall f, exists l1 l2, lbc (snd (fc' f)) = CReentryCall l1 l2 f.
 
+
+(** Denotational Semantics for Lc *)
 Inductive ceval' : label_context -> func_context' -> com' -> label -> label -> state -> state -> Prop :=
 (** Elementary Operations *)
   | E_Skip' : forall lbc fc' l1 l2 st,
       ceval' lbc fc' (CSkip' l1 l2) l1 l2 st st
   | E_Ass' : forall lbc fc' l1 l2 st X a n,
+      aeval st a = n ->
       ceval' lbc fc' (CAss' l1 l2 X a) l1 l2 st (update_state st X n)
 (** [] *)
 
@@ -191,12 +191,76 @@ Inductive ceval' : label_context -> func_context' -> com' -> label -> label -> s
       ceval' lbc fc' c' l1 l2 st1 st2
 (** [] *)
 .
+(** [] *)
 
+(** Equivalence between two Semantics *)
+Inductive com_equiv : com -> com' -> Prop :=
+  | CE_Skip : forall l1 l2,
+      com_equiv CSkip (CSkip' l1 l2)
+  | CE_Ass : forall l1 l2 X a,
+      com_equiv (CAss X a) (CAss' l1 l2 X a)
+  | CE_Seq : forall c1 c2 c1' c2',
+      com_equiv c1 c1' ->
+      com_equiv c2 c2' ->
+      com_equiv (CSeq c1 c2) (CSeq' c1' c2')
+  | CE_If : forall l1 l2 b c1 c2 c1' c2',
+      com_equiv c1 c1' ->
+      com_equiv c2 c2' ->
+      com_equiv (CIf b c1 c2) (CIf' l1 l2 b c1' c2')
+  | CE_While : forall l1 l2 b c c',
+      com_equiv c c' ->
+      com_equiv (CWhile b c) (CWhile' l1 l2 b c')
+  | CE_Call : forall l1 l2 f pv,
+      com_equiv (CCall f pv) (CCall' l1 l2 f pv)
+  | CE_Reentry : forall l1 l2 lf,
+      com_equiv (CReentry lf) (CReentry' l1 l2 lf)
+.
 
+Definition func_context_equiv (fc : func_context) (fc' : func_context') : Prop :=
+  forall f, fst (fc f) = fst (fst (fc' f)) /\ com_equiv (snd (fc f)) (snd (fst (fc' f))).
 
-
-
-
+Theorem ceval_equiv : forall c c' st1 st2 lbc fc fc',
+  label_func'_context_match lbc fc' ->
+  func_context_equiv fc fc' ->
+  valid_com_label c' ->
+  com_equiv c c' ->
+  ceval fc c st1 st2 <-> ceval' lbc fc' c' (get_entry_label c') (get_exit_label c') st1 st2.
+Proof.
+  intros.
+  rename H into Hlfe.
+  rename H0 into Hfe.
+  rename H1 into Hvl.
+  rename H2 into Hce.
+  revert st1 st2.
+  induction Hce; split; intros; simpl in *.
+  - inversion H; subst.
+    apply E_Skip'.
+  - inversion H; subst.
+    + apply E_Skip.
+    + inversion Hvl.
+      congruence.
+    + admit.
+  - inversion H; subst.
+    apply E_Ass'. reflexivity.
+  - inversion H; subst; simpl in *.
+    + apply E_Ass. reflexivity.
+    + inversion Hvl.
+      congruence.
+    + admit.
+  - inversion H; subst.
+    inversion Hvl; subst.
+    rewrite (IHHce1 H2) in H3.
+    rewrite (IHHce2 H4) in H6.
+    eapply E_Seq'.
+    + apply V_Seq'; assumption.
+    + apply H3.
+    + rewrite H5. apply H6.
+  - inversion H; subst.
+    + pose proof valid_label_no_loop (CSeq' c1' c2') Hvl.
+      simpl in H0. congruence.
+    + 
+Admitted.
+(** [] *)
 
 
 
