@@ -24,7 +24,6 @@ Inductive bexp : Type :=
   | BNot (b : bexp)
   | BAnd (b1 b2 : bexp).
 
-Module Origin.
 Inductive com : Type :=
   | CSkip
   | CAss (X : var) (a : aexp)
@@ -33,16 +32,6 @@ Inductive com : Type :=
   | CWhile (b : bexp) (c : com)
   | CCall (f : func) (prms : list aexp)
   | CReentry (lf : list func).
-End Origin.
-Module Test.
-Inductive com : Type :=
-  | CSeq1 (c1: com) (c2 : Origin.com)
-  | CSeq2 (c1 : Origin.com) (c2: com)
-(*  | CIf (b : bexp) (c1 c2 : com)
-  | CWhile (b : bexp) (c : com)
-*)
-  | Here (lf : list func). (* a reentry in origin *)
-End Test.
 (** [] *)
 
 (** State Model *)
