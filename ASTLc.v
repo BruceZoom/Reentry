@@ -38,6 +38,7 @@ Fixpoint get_exit_label (c' : com') : label :=
   | CReentryCall _ l2 _ => l2
   end.
 
+(** TODO: label inequality reconsider *)
 Inductive valid_com_label : com' -> Prop :=
   | V_Skip' : forall l1 l2,
       l1 <> l2 ->

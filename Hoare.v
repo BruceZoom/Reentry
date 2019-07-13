@@ -68,7 +68,6 @@ Proof.
     eapply H.
     pose proof H (param_to_local_state (loc1, glb1) (fst (fc f)) pv, glb1) (loc2, glb2) H2.
     simpl in H3.
-  }
 Admitted.
 
 Theorem hoare_consequence : forall fc P P' Q Q' c,
