@@ -3,80 +3,158 @@ Require Import AST.
 
 Inductive label : Type :=
   | LHere
-  | LSeq1 (c1 : label) (c2 : com)
-  | LSeq2 (c1 : com) (c2 : label)
-  | LIf1 (b : bexp) (c1 : label) (c2 : com)
-  | LIf2 (b : bexp) (c1 : com) (c2 : label)
+  | LPure
+  | LSeq (c1 : label) (c2 : label)
+  | LIf (b : bexp) (c1 : label) (c2 : label)
   | LWhile (b : bexp) (c : label)
 .
 
-Definition loc : Type := option label.
+Inductive is_pure : label -> Prop :=
+  | IP_Pure : is_pure LPure
+  | IP_Seq : forall l1 l2,
+      is_pure l1 ->
+      is_pure l2 ->
+      is_pure (LSeq l1 l2)
+  | IP_If : forall l1 l2 b,
+      is_pure l1 ->
+      is_pure l2 ->
+      is_pure (LIf b l1 l2)
+  | IP_While : forall l b,
+      is_pure l ->
+      is_pure (LWhile b l)
+.
 
-Inductive ceval' : func_context -> com -> loc -> loc -> state -> state -> Prop :=
+Inductive single_point : label -> Prop :=
+  | SP_Here : single_point LHere
+  | SP_Seq1 : forall l1 l2,
+      single_point l1 ->
+      is_pure l2 ->
+      single_point (LSeq l1 l2)
+  | SP_Seq2 : forall l1 l2,
+      is_pure l1 ->
+      single_point l2 ->
+      single_point (LSeq l1 l2)
+  | SP_If1 : forall l1 l2 b,
+      single_point l1 ->
+      is_pure l2 ->
+      single_point (LIf b l1 l2)
+  | SP_If2 : forall l1 l2 b,
+      is_pure l1 ->
+      single_point l2 ->
+      single_point (LIf b l1 l2)
+  | SP_While : forall l b,
+      single_point l ->
+      single_point (LWhile b l)
+.
+
+Definition valid_label (l : label) : Prop := is_pure l \/ single_point l.
+
+Fixpoint com_to_lable_pure (c : com) : label :=
+  match c with
+  | CSeq c1 c2 => LSeq (com_to_lable_pure c1) (com_to_lable_pure c2)
+  | CIf b c1 c2 => LIf b (com_to_lable_pure c1) (com_to_lable_pure c2)
+  | CWhile b c => LWhile b (com_to_lable_pure c)
+  | _ => LPure
+  end.
+
+Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Prop :=
   | E'_Skip : forall fc st,
-      ceval' fc CSkip None None st st
+      ceval' fc CSkip LPure LPure st st
   | E'_Ass : forall fc st X a n,
       aeval st a = n ->
-      ceval' fc (CAss X a) None None st (update_state st X n)
+      ceval' fc (CAss X a) LPure LPure st (update_state st X n)
 
-  | E'_Seq : forall fc c1 c2 l1 l2 st1 st2 st3,
-      ceval' fc c1 l1 None st1 st3 ->
-      ceval' fc c2 None l2 st3 st2 ->
-      ceval' fc (CSeq c1 c2) l1 l2 st1 st2
+  | E'_Seq : forall fc c1 c2 l1 l2 l3 l4 st1 st2 st3,
+      valid_label l1 ->
+      is_pure l2 ->
+      is_pure l3 ->
+      valid_label l4 ->
+      ceval' fc c1 l1 l2 st1 st3 ->
+      ceval' fc c2 l3 l4 st3 st2 ->
+      ceval' fc (CSeq c1 c2) (LSeq l1 l3) (LSeq l2 l4) st1 st2
   | E'_Seq1 : forall fc c1 c2 l1 l2 st1 st2,
-      ceval' fc c1 l1 (Some l2) st1 st2 ->
-      ceval' fc (CSeq c1 c2) l1 (Some l2) st1 st2
+      valid_label l1 ->
+      single_point l2 ->
+      ceval' fc c1 l1 l2 st1 st2 ->
+      ceval' fc (CSeq c1 c2)
+        (LSeq l1 (com_to_lable_pure c2)) (LSeq l2 (com_to_lable_pure c2)) st1 st2
   | E'_Seq2 : forall fc c1 c2 l1 l2 st1 st2,
-      ceval' fc c2 (Some l1) l2 st1 st2 ->
-      ceval' fc (CSeq c1 c2) (Some l1) l2 st1 st2
+      valid_label l1 ->
+      single_point l2 ->
+      ceval' fc c2 l1 l2 st1 st2 ->
+      ceval' fc (CSeq c1 c2)
+        (LSeq (com_to_lable_pure c1) l1) (LSeq (com_to_lable_pure c1) l2) st1 st2
 
-  | E'_IfTrue : forall fc b c1 c2 l st1 st2,
+  | E'_IfTrue : forall fc b c1 c2 l1 l2 st1 st2,
+      is_pure l1 ->
+      valid_label l2 ->
       beval st1 b = true ->
-      ceval' fc c1 None l st1 st2 ->
-      ceval' fc (CIf b c1 c2) None l st1 st2
-  | E'_IfFalse : forall fc b c1 c2 l st1 st2,
+      ceval' fc c1 l1 l2 st1 st2 ->
+      ceval' fc (CIf b c1 c2)
+        (LIf b l1 (com_to_lable_pure c2)) (LIf b l2 (com_to_lable_pure c2)) st1 st2
+  | E'_IfFalse : forall fc b c1 c2 l1 l2 st1 st2,
+      is_pure l1 ->
+      valid_label l2 ->
       beval st1 b = false ->
-      ceval' fc c2 None l st1 st2 ->
-      ceval' fc (CIf b c1 c2) None l st1 st2
+      ceval' fc c2 l1 l2 st1 st2 ->
+      ceval' fc (CIf b c1 c2)
+        (LIf b (com_to_lable_pure c1) l1) (LIf b (com_to_lable_pure c1) l2) st1 st2
   | E'_If1 : forall fc b c1 c2 l1 l2 st1 st2,
-      ceval' fc c1 (Some l1) l2 st1 st2 ->
-      ceval' fc (CIf b c1 c2) (Some l1) l2 st1 st2
+      single_point l1 ->
+      valid_label l2 ->
+      ceval' fc c1 l1 l2 st1 st2 ->
+      ceval' fc (CIf b c1 c2)
+        (LIf b l1 (com_to_lable_pure c2)) (LIf b l2 (com_to_lable_pure c2)) st1 st2
   | E'_If2 : forall fc b c1 c2 l1 l2 st1 st2,
-      ceval' fc c2 (Some l1) l2 st1 st2 ->
-      ceval' fc (CIf b c1 c2) (Some l1) l2 st1 st2
+      single_point l1 ->
+      valid_label l2 ->
+      ceval' fc c2 l1 l2 st1 st2 ->
+      ceval' fc (CIf b c1 c2)
+        (LIf b (com_to_lable_pure c1) l1) (LIf b (com_to_lable_pure c1) l2) st1 st2
 
   | E'_WhileFalse : forall fc b c st,
       beval st b = false ->
-      ceval' fc (CWhile b c) None None st st
-  | E'_WhileTrue1 : forall fc b c l st1 st2,
+      ceval' fc (CWhile b c)
+        (LWhile b (com_to_lable_pure c)) (LWhile b (com_to_lable_pure c)) st st
+  | E'_WhileTrue1 : forall fc b c l1 l2 st1 st2,
+      is_pure l1 ->
+      single_point l2 ->
       beval st1 b = true ->
-      ceval' fc c None (Some l) st1 st2 ->
-      ceval' fc (CWhile b c) None (Some l) st1 st2
-  | E'_WhileTrue2 : forall fc b c l st1 st2 st3,
+      ceval' fc c l1 l2 st1 st2 ->
+      ceval' fc (CWhile b c) (LWhile b l1) (LWhile b l2) st1 st2
+  | E'_WhileTrue2 : forall fc b c l1 l2 st1 st2 st3,
+      is_pure l1 ->
+      valid_label l2 ->
       beval st1 b = true ->
-      ceval' fc c None None st1 st3 ->
-      ceval' fc (CWhile b c) None l st3 st2 ->
-      ceval' fc (CWhile b c) None l st1 st2
+      ceval' fc c (com_to_lable_pure c) (com_to_lable_pure c) st1 st3 ->
+      ceval' fc (CWhile b c) l1 l2 st3 st2 ->
+      ceval' fc (CWhile b c) l1 l2 st1 st2
   | E'_WhileSeg1 : forall fc b c l1 l2 st1 st2,
-      ceval' fc c (Some l1) (Some l2) st1 st2 ->
-      ceval' fc (CWhile b c) (Some l1) (Some l2) st1 st2
+      single_point l1 ->
+      single_point l2 ->
+      ceval' fc c l1 l2 st1 st2 ->
+      ceval' fc (CWhile b c) (LWhile b l1) (LWhile b l2) st1 st2
   | E'_WhileSeg2 : forall fc b c l1 l2 st1 st2 st3,
-      ceval' fc c (Some l1) None st1 st3 ->
-      ceval' fc (CWhile b c) None l2 st3 st2 ->
-      ceval' fc (CWhile b c) (Some l1) l2 st1 st2
+      single_point l1 ->
+      valid_label l2 ->
+      ceval' fc c l1 (com_to_lable_pure c) st1 st3 ->
+      ceval' fc (CWhile b c) (LWhile b (com_to_lable_pure c)) l2 st3 st2 ->
+      ceval' fc (CWhile b c) l1 l2 st1 st2
 
   | E'_Call : forall fc f pv loc1 glb1 glb2,
       (exists loc2,
-        ceval' fc (snd (fc f)) None None ((param_to_local_state (loc1, glb1) (fst (fc f)) pv), glb1) (loc2, glb2)) ->
-      ceval' fc (CCall f pv) None None (loc1, glb1) (loc1, glb2)
+        ceval' fc (snd (fc f))
+          (com_to_lable_pure (snd (fc f))) (com_to_lable_pure (snd (fc f)))
+          ((param_to_local_state (loc1, glb1) (fst (fc f)) pv), glb1) (loc2, glb2)) ->
+      ceval' fc (CCall f pv) LPure LPure (loc1, glb1) (loc1, glb2)
 
   | E'_Reentry1c : forall fc lf st,
-      ceval' fc (CReentry lf) None (Some LHere) st st
+      ceval' fc (CReentry lf) LPure LHere st st
   | E'_Reentryr2 : forall fc lf st,
-      ceval' fc (CReentry lf) (Some LHere) None st st
+      ceval' fc (CReentry lf) LHere LPure st st
 .
 
-
+(*
 Definition label : Type := nat.
 
 Inductive com' : Type :=
@@ -338,7 +416,7 @@ Proof.
     + 
 Admitted.
 (** [] *)
-
+*)
 
 
 
