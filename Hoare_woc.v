@@ -1,5 +1,5 @@
 Require Import Coq.Lists.List.
-Require Import AST.
+Require Import AST_woc.
 
 Definition Assertion := state -> Prop.
 

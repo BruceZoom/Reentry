@@ -1,7 +1,7 @@
 Require Import Coq.Lists.List.
-Require Import AST.
-Require Import Hoare.
-Require Import ASTLc.
+Require Import AST_woc.
+Require Import ASTLc_woc.
+Require Import Hoare_woc.
 
 
 Definition LContSet := list (label * Assertion).

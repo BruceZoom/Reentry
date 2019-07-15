@@ -1,5 +1,5 @@
 Require Import Coq.Lists.List.
-Require Import AST.
+Require Import AST_wc.
 
 Inductive label : Type :=
   | LHere
@@ -141,6 +141,7 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
       ceval' fc (CWhile b c) (LWhile b (com_to_lable_pure c)) l2 st3 st2 ->
       ceval' fc (CWhile b c) l1 l2 st1 st2
 
+(* TODO: correct semantics of call *)
   | E'_Call : forall fc f pv loc1 glb1 glb2,
       (exists loc2,
 (*         mult_ceval' fc (snd (fc f)) *)
