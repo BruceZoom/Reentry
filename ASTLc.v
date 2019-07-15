@@ -143,7 +143,8 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
 
   | E'_Call : forall fc f pv loc1 glb1 glb2,
       (exists loc2,
-        ceval' fc (snd (fc f))
+(*         mult_ceval' fc (snd (fc f)) *)
+          ceval' fc (snd (fc f))
           (com_to_lable_pure (snd (fc f))) (com_to_lable_pure (snd (fc f)))
           ((param_to_local_state (loc1, glb1) (fst (fc f)) pv), glb1) (loc2, glb2)) ->
       ceval' fc (CCall f pv) LPure LPure (loc1, glb1) (loc1, glb2)
@@ -152,6 +153,31 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
       ceval' fc (CReentry lf) LPure LHere st st
   | E'_Reentryr2 : forall fc lf st,
       ceval' fc (CReentry lf) LHere LPure st st
+.
+
+Definition pop {A : Type} (stk : list A) : list A :=
+  match stk with
+  | nil => nil
+  | _ :: stk' => stk'
+  end.
+
+Inductive mult_ceval' : func_context -> func -> label -> label -> state -> state -> list (func * unit_state) -> Prop :=
+  | ceval'_r : forall fc f l1 l2 st1 st2,
+      ceval' fc (snd (fc f)) l1 l2 st1 st2 ->
+      mult_ceval' fc f l1 l2 st1 st2 nil
+  | ceval'_tr_re : forall fc f f' pv l1 l2 l3 l4 st1 loc1 loc2 glb1 glb2 stk,
+      single_point l2 ->
+      is_pure l3 ->
+      mult_ceval' fc f l1 l2 st1 (loc1, glb1) stk ->
+      ceval' fc (snd (fc f')) l3 l4
+        (param_to_local_state (loc1, glb1) (fst (fc f')) (map (fun n => ANum n) pv), glb1) (loc2, glb2) ->
+      mult_ceval' fc f' l1 l4 st1 (loc2, glb2) ((f', loc2)::stk).
+  | ceval'_tr_ex : forall fc f l1 l2 l3 l4 st1 st2 st3,
+      single_point l2 ->
+      single_point l3 ->
+      mult_ceval' fc f l1 l2 st1 st2 ->
+      ceval' fc (snd (fc f)) l3 l4 st2 st3 ->
+      mult_ceval' fc f l1 l4 st1 st3
 .
 
 (*
