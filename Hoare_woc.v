@@ -54,22 +54,6 @@ Notation "'|' fc '|' '{{' P '}}' c '{{' Q '}}'" := (hoare_triple fc P c Q) (at l
 Definition pv_to_assertion (fc : func_context) (f : func) (pv : list aexp) (P : Assertion) : Assertion :=
   fun st => P (param_to_local_state st (fst (fc f)) pv, snd st).
 
-Theorem func_hoare_triple_equiv : forall fc f pv P Q,
-  func_triple fc (pv_to_assertion fc f pv P) f Q <->
-  |fc| {{P}} (CCall f pv) {{Q}}.
-Proof.
-  intros.
-  split.
-  {
-    unfold func_triple, hoare_triple.
-    intros.
-    inversion H0; subst.
-    destruct H7 as [loc2 ?].
-    eapply H.
-    pose proof H (param_to_local_state (loc1, glb1) (fst (fc f)) pv, glb1) (loc2, glb2) H2.
-    simpl in H3.
-Admitted.
-
 Theorem hoare_consequence : forall fc P P' Q Q' c,
   P |-- P' ->
   |fc| {{P'}} c {{Q'}} ->
@@ -107,10 +91,6 @@ Proof.
     apply IHceval2.
     apply IHceval1 in H7.
     rewrite H7. apply H10.
-  - inversion H0; subst.
-    destruct H. destruct H7.
-    (* No inductive hypothesis ?! *)
-    admit.
   - admit.
 (*  - admit.*)
 Admitted.
@@ -118,11 +98,11 @@ Admitted.
 Theorem hoare_reentry : forall fc lf P I,
   localp P ->
   globalp I ->
-  (forall f pv, In f lf ->
-      |fc| {{ I }} CCall f pv {{ I }}) ->
+  (forall f, In f lf ->
+      func_triple fc I f I) ->
   |fc| {{ P AND I }} CReentry lf {{ P AND I }}.
 Proof.
-  unfold localp, globalp, hoare_triple.
+  unfold localp, globalp, hoare_triple, func_triple.
   intros.
 (** Attempt arbitrary reentry *)
   inversion H2; subst.
@@ -131,10 +111,12 @@ Proof.
   split; [eapply H; apply H3 | ].
   induction H6.
   - exact H4.
-  - pose proof H1 f (map (fun v : nat => ANum v) pv) H5 _ _ H6 H4.
+  - pose proof H0 _ loc1 _ H4.
+    pose proof H1 f H5 _ _ H6 H8.
+    apply (H0 _ loc _) in H9.
     apply E_Reentry in H7.
-    pose proof IHarbitrary_eval H1 (H _ _ _ H3) H8 H7.
-    exact H9.
+    pose proof IHarbitrary_eval H1 (H _ _ _ H3) H9 H7.
+    exact H10.
 Qed.
 (** [] *)
 
@@ -152,7 +134,7 @@ Qed.
     {
       pose proof ceval_deterministic _ _ _ _ _ H4 H7.
       congruence.
-    }
+    } 
     destruct H4 as [glb3' [? ?]].
     pose proof ceval_deterministic _ _ _ _ _ H4 H7.
     inversion H9; subst; clear H9.
