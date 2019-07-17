@@ -79,8 +79,8 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
       ceval' fc (CSeq c1 c2)
         (LSeq l1 (com_to_lable_pure c2)) (LSeq l2 (com_to_lable_pure c2)) st1 st2
   | E'_Seq2 : forall fc c1 c2 l1 l2 st1 st2,
-      valid_label l1 ->
-      single_point l2 ->
+      single_point l1 ->
+      valid_label l2 ->
       ceval' fc c2 l1 l2 st1 st2 ->
       ceval' fc (CSeq c1 c2)
         (LSeq (com_to_lable_pure c1) l1) (LSeq (com_to_lable_pure c1) l2) st1 st2
