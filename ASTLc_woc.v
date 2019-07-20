@@ -1,6 +1,14 @@
 Require Import Coq.Lists.List.
 Require Import AST_woc.
 
+Require Import Coq.Relations.Relation_Operators.
+Require Import Coq.Relations.Relation_Definitions.
+Arguments clos_refl_trans {A} _ _ _.
+Arguments clos_refl_trans_1n {A} _ _ _.
+Arguments clos_refl_trans_n1 {A} _ _ _.
+
+
+(** Definitions about label *)
 Inductive label : Type :=
   | LHere
   | LPure
@@ -57,6 +65,22 @@ Fixpoint com_to_lable_pure (c : com) : label :=
   | _ => LPure
   end.
 
+Lemma com_to_lable_pure_is_pure : forall c,
+  is_pure (com_to_lable_pure c).
+Proof.
+  intros.
+  induction c.
+  - simpl. apply IP_Pure.
+  - simpl. apply IP_Pure.
+  - simpl. apply IP_Seq; assumption.
+  - simpl. apply IP_If; assumption.
+  - simpl. apply IP_While; assumption.
+  - simpl. apply IP_Pure.
+Qed.
+(** [] *)
+
+
+(** Definition of basic ceval' *)
 Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Prop :=
   | E'_Skip : forall fc st,
       ceval' fc CSkip LPure LPure st st
@@ -146,30 +170,22 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
   | E'_Reentryr2 : forall fc lf st,
       ceval' fc (CReentry lf) LHere LPure st st
 .
+(** [] *)
 
-Definition pop {A : Type} (stk : list A) : list A :=
-  match stk with
-  | nil => nil
-  | _ :: stk' => stk'
-  end.
 
-Inductive mult_ceval' : func_context -> func -> label -> label -> state -> state -> list (func * unit_state) -> Prop :=
-  | ceval'_r : forall fc f l1 l2 st1 st2,
+(** Bridging basic ceval' to multi_ceval' *)
+Inductive middle_ceval' : func_context -> list (func * label * state) -> list (func * label * state) -> Prop :=
+  | ME_r : forall fc f l1 l2 st1 st2 stk,
       ceval' fc (snd (fc f)) l1 l2 st1 st2 ->
-      mult_ceval' fc f l1 l2 st1 st2 nil
-  | ceval'_tr_re : forall fc f f' pv l1 l2 l3 l4 st1 loc1 loc2 glb1 glb2 stk,
-      single_point l2 ->
-      is_pure l3 ->
-      mult_ceval' fc f l1 l2 st1 (loc1, glb1) stk ->
-      ceval' fc (snd (fc f')) l3 l4
-        (param_to_local_state (loc1, glb1) (fst (fc f')) (map (fun n => ANum n) pv), glb1) (loc2, glb2) ->
-      mult_ceval' fc f' l1 l4 st1 (loc2, glb2) ((f', loc2)::stk).
-(*   | ceval'_tr_ex : forall fc f l1 l2 l3 l4 st1 st2 st3,
-      single_point l2 ->
-      single_point l3 ->
-      mult_ceval' fc f l1 l2 st1 st2 ->
-      ceval' fc (snd (fc f)) l3 l4 st2 st3 ->
-      mult_ceval' fc f l1 l4 st1 st3
-. *)
+      middle_ceval' fc ((f, l1, st1) :: stk) ((f, l2, st2) :: stk)
+  | ME_re : forall fc f1 f2 l1 loc1 loc2 glb stk,
+      single_point l1 ->
+      middle_ceval' fc ((f1, l1, (loc1, glb)) :: stk)
+        ((f2, (com_to_lable_pure (snd (fc f2))), (loc2, glb)) :: (f1, l1, (loc1, glb)) :: stk)
+  | ME_ex : forall fc f1 f2 l2 loc1 loc2 glb1 glb2 stk,
+      middle_ceval' fc
+        ((f1, (com_to_lable_pure (snd (fc f1))), (loc1, glb1)) :: (f2, l2, (loc2, glb2)) :: stk)
+        ((f2, l2, (loc2, glb1)) :: stk).
 
-
+Definition multi_ceval' (fc : func_context) : list (func * label * state) -> list (func * label * state) -> Prop := clos_refl_trans (middle_ceval' fc).
+(** [] *)
