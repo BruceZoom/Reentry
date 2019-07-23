@@ -77,6 +77,32 @@ Proof.
   - simpl. apply IP_While; assumption.
   - simpl. apply IP_Pure.
 Qed.
+
+Lemma pure_no_point : forall c,
+  is_pure c ->
+  ~single_point c.
+Proof.
+  unfold not.
+  intros.
+  induction H.
+  - inversion H0.
+  - inversion H0.
+    apply (IHis_pure1 H4).
+    apply (IHis_pure2 H5).
+  - inversion H0.
+    apply (IHis_pure1 H4).
+    apply (IHis_pure2 H6).
+  - inversion H0.
+    apply (IHis_pure H2).
+Qed.
+
+Lemma com_to_lable_pure_no_point : forall c,
+  ~single_point (com_to_lable_pure c).
+Proof.
+  intros.
+  apply pure_no_point.
+  apply com_to_lable_pure_is_pure.
+Qed.
 (** [] *)
 
 
@@ -174,7 +200,9 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
 
 
 (** Bridging basic ceval' to multi_ceval' *)
-Inductive middle_ceval' : func_context -> list (func * label * state) -> list (func * label * state) -> Prop :=
+Definition restk : Type := list (func * label * state).
+
+Inductive middle_ceval' : func_context -> restk -> restk -> Prop :=
   | ME_r : forall fc f l1 l2 st1 st2 stk,
       ceval' fc (snd (fc f)) l1 l2 st1 st2 ->
       middle_ceval' fc ((f, l1, st1) :: stk) ((f, l2, st2) :: stk)
@@ -187,5 +215,189 @@ Inductive middle_ceval' : func_context -> list (func * label * state) -> list (f
         ((f1, (com_to_lable_pure (snd (fc f1))), (loc1, glb1)) :: (f2, l2, (loc2, glb2)) :: stk)
         ((f2, l2, (loc2, glb1)) :: stk).
 
-Definition multi_ceval' (fc : func_context) : list (func * label * state) -> list (func * label * state) -> Prop := clos_refl_trans (middle_ceval' fc).
+Print clos_trans.
+(*
+Inductive clos_trans (A : Type) (R : relation A) (x : A) : A -> Prop :=
+    t_step : forall y : A, R x y -> clos_trans A R x y
+  | t_trans : forall y z : A, clos_trans A R x y -> clos_trans A R y z -> clos_trans A R x z
+*)
+Definition multi_ceval' (fc : func_context) : restk -> restk -> Prop :=
+  clos_trans restk (middle_ceval' fc).
+
+Lemma middle_ceval'_pure : forall fc f l1 l2 st1 st2,
+  middle_ceval' fc ((f, l1, st1) :: nil) ((f, l2, st2) :: nil) ->
+  ceval' fc (snd (fc f)) l1 l2 st1 st2.
+Proof.
+  intros.
+  inversion H; subst.
+  exact H2.
+Qed.
 (** [] *)
+
+
+(** Equivalence between ceval & multi_ceval' *)
+Check ceval.
+Check multi_ceval'.
+Print ceval.
+Definition ceval'_derive_multi_ceval (fc : func_context) (f : func) (st1 st2 : state) : Prop :=
+  ceval fc (snd (fc f)) st1 st2 ->
+  multi_ceval' fc
+    ((f, com_to_lable_pure (snd (fc f)), st1) :: nil)
+    ((f, com_to_lable_pure (snd (fc f)), st2) :: nil).
+
+Definition ceval_multi_derive_ceval' (fc : func_context) (f : func) (st1 st2 : state) : Prop :=
+  multi_ceval' fc
+    ((f, com_to_lable_pure (snd (fc f)), st1) :: nil)
+    ((f, com_to_lable_pure (snd (fc f)), st2) :: nil) ->
+  ceval fc (snd (fc f)) st1 st2.
+
+Scheme eval_abeval := Minimality for ceval Sort Prop
+  with abeval_eval := Minimality for arbitrary_eval Sort Prop.
+
+Check eval_abeval.
+
+Theorem ceval'_derive_multi_ceval_correct : forall fc f st1 st2,
+  ceval'_derive_multi_ceval fc f st1 st2.
+Proof.
+  unfold ceval'_derive_multi_ceval.
+  intros.
+  remember (snd (fc f)) as c.
+  revert f Heqc.
+  induction H; intros.
+  - simpl.
+    apply t_step, ME_r.
+    rewrite <- Heqc.
+    apply E'_Skip.
+  - simpl.
+    apply t_step, ME_r.
+    rewrite <- Heqc.
+    apply E'_Ass, H.
+  - simpl.
+Admitted.
+
+Theorem ceval_multi_derive_ceval'_correct : forall fc f st1 st2,
+  ceval_multi_derive_ceval' fc f st1 st2.
+Proof.
+  unfold ceval_multi_derive_ceval', multi_ceval'.
+  intros.
+
+   inversion H; subst.
+  {
+    apply middle_ceval'_pure in H0.
+    remember (snd (fc f)) as c.
+    clear Heqc H.
+    generalize dependent st2. revert st1.
+    induction c; intros;
+     inversion H0; subst;
+    try (pose proof com_to_lable_pure_no_point c1;
+         congruence);
+    try (pose proof com_to_lable_pure_no_point c2;
+         congruence);
+    try (pose proof com_to_lable_pure_no_point c;
+         congruence).
+    - apply E_Skip.
+    - apply E_Ass. reflexivity.
+    - apply IHc1 in H13.
+      apply IHc2 in H14.
+      eapply E_Seq;
+      [apply H13 | apply H14].
+    - apply IHc1 in H11.
+      apply (E_IfTrue _ _ _ _ _ _ H10).
+      apply H11.
+    - apply IHc2 in H11.
+      apply (E_IfFalse _ _ _ _ _ _ H10).
+      apply H11.
+    - apply E_WhileFalse.
+      apply H2.
+    - apply IHc in H6.
+      eapply E_WhileTrue.
+      apply H4. apply H6.
+      admit.
+    - pose proof com_to_lable_pure_no_point (CWhile b c);
+      congruence.
+  }
+  {
+    remember (snd (fc f)) as c.
+    clear H.
+    generalize dependent y.
+    revert st1 st2.
+    induction c; intros; simpl in *.
+    - inversion H0; inversion H1; subst.
+      + inversion H; inversion H3; subst;
+        try (rewrite <- Heqc in * ).
+        * inversion H9; inversion H13; inversion H12; subst.
+          apply E_Skip.
+        * inversion H11.
+        * inversion H12.
+        * inversion H9.
+      + inversion H; subst.
+        rewrite <- Heqc in *.
+        Abort.
+
+(*   remember ((f, com_to_lable_pure (snd (fc f)), st1) :: nil) as stk1.
+  remember ((f, com_to_lable_pure (snd (fc f)), st2) :: nil) as stk2.
+  generalize dependent st1.
+  generalize dependent st2.
+  induction H; intros; subst.
+  {
+    apply middle_ceval'_pure in H.
+    remember (snd (fc f)) as c.
+    clear Heqc.
+    generalize dependent st2. revert st1.
+    induction c; intros;
+     inversion H; subst;
+    try (pose proof com_to_lable_pure_no_point c1;
+         congruence);
+    try (pose proof com_to_lable_pure_no_point c2;
+         congruence);
+    try (pose proof com_to_lable_pure_no_point c;
+         congruence).
+    - apply E_Skip.
+    - apply E_Ass. reflexivity.
+    - apply IHc1 in H13.
+      apply IHc2 in H14.
+      eapply E_Seq;
+      [apply H13 | apply H14].
+    - apply IHc1 in H11.
+      apply (E_IfTrue _ _ _ _ _ _ H10).
+      apply H11.
+    - apply IHc2 in H11.
+      apply (E_IfFalse _ _ _ _ _ _ H10).
+      apply H11.
+    - apply E_WhileFalse.
+      apply H2.
+    - apply IHc in H6.
+      eapply E_WhileTrue.
+      apply H4. apply H6.
+      admit.
+    - pose proof com_to_lable_pure_no_point (CWhile b c);
+      congruence.
+  }
+  {
+    
+  }
+  induction c.
+  - simpl in H.
+    inversion H.
+    +
+Admitted. *)
+(** [] *)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
