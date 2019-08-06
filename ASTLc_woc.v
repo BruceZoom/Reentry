@@ -78,6 +78,15 @@ Proof.
   - simpl. apply IP_Pure.
 Qed.
 
+Lemma com_to_lable_pure_valid : forall c,
+  valid_label (com_to_lable_pure c).
+Proof.
+  intros.
+  unfold valid_label.
+  left.
+  apply com_to_lable_pure_is_pure.
+Qed.
+
 Lemma pure_no_point : forall c,
   is_pure c ->
   ~single_point c.
@@ -239,11 +248,20 @@ Qed.
 Check ceval.
 Check multi_ceval'.
 Print ceval.
+
 Definition ceval'_derive_multi_ceval (fc : func_context) (c : com) (st1 st2 : state) : Prop :=
   ceval fc c st1 st2 ->
   multi_ceval' fc
     ((c, com_to_lable_pure c, st1) :: nil)
     ((c, com_to_lable_pure c, st2) :: nil).
+
+(* Definition arbitrary_eval
+  arbitrary_eval fc lf loc glb1 glb2 ->
+  single_point lb ->
+  multi_ceval' fc
+    ((c, lb, (loc, glb1)) :: stk)
+    ((c, lb, (loc, glb2)) :: stk) *)
+
 (* 
 Definition ceval_multi_derive_ceval' (fc : func_context) (f : func) (st1 st2 : state) : Prop :=
   multi_ceval' fc
@@ -267,9 +285,14 @@ Proof.
     apply t_step, ME_r.
     apply E'_Ass, H.
   - simpl.
+    
     apply t_step, ME_r.
-  
-  
+    eapply E'_Seq.
+    apply com_to_lable_pure_valid.
+    apply com_to_lable_pure_is_pure.
+    apply com_to_lable_pure_is_pure.
+    apply com_to_lable_pure_valid.
+    
 (*   remember (snd (fc f)) as c.
   revert f Heqc.
   induction H; intros.
