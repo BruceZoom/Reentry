@@ -57,16 +57,16 @@ Inductive single_point : label -> Prop :=
 
 Definition valid_label (l : label) : Prop := is_pure l \/ single_point l.
 
-Fixpoint com_to_lable_pure (c : com) : label :=
+Fixpoint com_to_label_pure (c : com) : label :=
   match c with
-  | CSeq c1 c2 => LSeq (com_to_lable_pure c1) (com_to_lable_pure c2)
-  | CIf b c1 c2 => LIf b (com_to_lable_pure c1) (com_to_lable_pure c2)
-  | CWhile b c => LWhile b (com_to_lable_pure c)
+  | CSeq c1 c2 => LSeq (com_to_label_pure c1) (com_to_label_pure c2)
+  | CIf b c1 c2 => LIf b (com_to_label_pure c1) (com_to_label_pure c2)
+  | CWhile b c => LWhile b (com_to_label_pure c)
   | _ => LPure
   end.
 
-Lemma com_to_lable_pure_is_pure : forall c,
-  is_pure (com_to_lable_pure c).
+Lemma com_to_label_pure_is_pure : forall c,
+  is_pure (com_to_label_pure c).
 Proof.
   intros.
   induction c.
@@ -78,13 +78,13 @@ Proof.
   - simpl. apply IP_Pure.
 Qed.
 
-Lemma com_to_lable_pure_valid : forall c,
-  valid_label (com_to_lable_pure c).
+Lemma com_to_label_pure_valid : forall c,
+  valid_label (com_to_label_pure c).
 Proof.
   intros.
   unfold valid_label.
   left.
-  apply com_to_lable_pure_is_pure.
+  apply com_to_label_pure_is_pure.
 Qed.
 
 Lemma pure_no_point : forall c,
@@ -105,12 +105,12 @@ Proof.
     apply (IHis_pure H2).
 Qed.
 
-Lemma com_to_lable_pure_no_point : forall c,
-  ~single_point (com_to_lable_pure c).
+Lemma com_to_label_pure_no_point : forall c,
+  ~single_point (com_to_label_pure c).
 Proof.
   intros.
   apply pure_no_point.
-  apply com_to_lable_pure_is_pure.
+  apply com_to_label_pure_is_pure.
 Qed.
 (** [] *)
 
@@ -136,13 +136,13 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
       single_point l2 ->
       ceval' fc c1 l1 l2 st1 st2 ->
       ceval' fc (CSeq c1 c2)
-        (LSeq l1 (com_to_lable_pure c2)) (LSeq l2 (com_to_lable_pure c2)) st1 st2
+        (LSeq l1 (com_to_label_pure c2)) (LSeq l2 (com_to_label_pure c2)) st1 st2
   | E'_Seq2 : forall fc c1 c2 l1 l2 st1 st2,
       single_point l1 ->
       valid_label l2 ->
       ceval' fc c2 l1 l2 st1 st2 ->
       ceval' fc (CSeq c1 c2)
-        (LSeq (com_to_lable_pure c1) l1) (LSeq (com_to_lable_pure c1) l2) st1 st2
+        (LSeq (com_to_label_pure c1) l1) (LSeq (com_to_label_pure c1) l2) st1 st2
 
   | E'_IfTrue : forall fc b c1 c2 l1 l2 st1 st2,
       is_pure l1 ->
@@ -150,31 +150,31 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
       beval st1 b = true ->
       ceval' fc c1 l1 l2 st1 st2 ->
       ceval' fc (CIf b c1 c2)
-        (LIf b l1 (com_to_lable_pure c2)) (LIf b l2 (com_to_lable_pure c2)) st1 st2
+        (LIf b l1 (com_to_label_pure c2)) (LIf b l2 (com_to_label_pure c2)) st1 st2
   | E'_IfFalse : forall fc b c1 c2 l1 l2 st1 st2,
       is_pure l1 ->
       valid_label l2 ->
       beval st1 b = false ->
       ceval' fc c2 l1 l2 st1 st2 ->
       ceval' fc (CIf b c1 c2)
-        (LIf b (com_to_lable_pure c1) l1) (LIf b (com_to_lable_pure c1) l2) st1 st2
+        (LIf b (com_to_label_pure c1) l1) (LIf b (com_to_label_pure c1) l2) st1 st2
   | E'_If1 : forall fc b c1 c2 l1 l2 st1 st2,
       single_point l1 ->
       valid_label l2 ->
       ceval' fc c1 l1 l2 st1 st2 ->
       ceval' fc (CIf b c1 c2)
-        (LIf b l1 (com_to_lable_pure c2)) (LIf b l2 (com_to_lable_pure c2)) st1 st2
+        (LIf b l1 (com_to_label_pure c2)) (LIf b l2 (com_to_label_pure c2)) st1 st2
   | E'_If2 : forall fc b c1 c2 l1 l2 st1 st2,
       single_point l1 ->
       valid_label l2 ->
       ceval' fc c2 l1 l2 st1 st2 ->
       ceval' fc (CIf b c1 c2)
-        (LIf b (com_to_lable_pure c1) l1) (LIf b (com_to_lable_pure c1) l2) st1 st2
+        (LIf b (com_to_label_pure c1) l1) (LIf b (com_to_label_pure c1) l2) st1 st2
 
   | E'_WhileFalse : forall fc b c st,
       beval st b = false ->
       ceval' fc (CWhile b c)
-        (LWhile b (com_to_lable_pure c)) (LWhile b (com_to_lable_pure c)) st st
+        (LWhile b (com_to_label_pure c)) (LWhile b (com_to_label_pure c)) st st
   | E'_WhileTrue1 : forall fc b c l1 l2 st1 st2,
       is_pure l1 ->
       single_point l2 ->
@@ -185,7 +185,7 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
       is_pure l1 ->
       valid_label l2 ->
       beval st1 b = true ->
-      ceval' fc c (com_to_lable_pure c) (com_to_lable_pure c) st1 st3 ->
+      ceval' fc c (com_to_label_pure c) (com_to_label_pure c) st1 st3 ->
       ceval' fc (CWhile b c) l1 l2 st3 st2 ->
       ceval' fc (CWhile b c) l1 l2 st1 st2
   | E'_WhileSeg1 : forall fc b c l1 l2 st1 st2,
@@ -196,8 +196,8 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
   | E'_WhileSeg2 : forall fc b c l1 l2 st1 st2 st3,
       single_point l1 ->
       valid_label l2 ->
-      ceval' fc c l1 (com_to_lable_pure c) st1 st3 ->
-      ceval' fc (CWhile b c) (LWhile b (com_to_lable_pure c)) l2 st3 st2 ->
+      ceval' fc c l1 (com_to_label_pure c) st1 st3 ->
+      ceval' fc (CWhile b c) (LWhile b (com_to_label_pure c)) l2 st3 st2 ->
       ceval' fc (CWhile b c) l1 l2 st1 st2
 
   | E'_Reentry1c : forall fc st,
@@ -220,13 +220,15 @@ Inductive middle_ceval' : func_context -> public_funcs -> restk -> restk -> Prop
       c2 = snd (fc f) ->
       single_point l1 ->
       middle_ceval' fc lf ((c1, l1, (loc1, glb)) :: stk)
-        ((c2, com_to_lable_pure c2, (loc2, glb)) :: (c1, l1, (loc1, glb)) :: stk)
+        ((c2, com_to_label_pure c2, (loc2, glb)) :: (c1, l1, (loc1, glb)) :: stk)
   | ME_ex : forall fc c1 c2 l2 loc1 loc2 glb1 glb2 stk lf,
+      single_point l2 ->
       middle_ceval' fc lf
-        ((c1, (com_to_lable_pure c1), (loc1, glb1)) :: (c2, l2, (loc2, glb2)) :: stk)
+        ((c1, (com_to_label_pure c1), (loc1, glb1)) :: (c2, l2, (loc2, glb2)) :: stk)
         ((c2, l2, (loc2, glb1)) :: stk).
 
 Print clos_trans.
+Search clos_trans_1n.
 (*
 Inductive clos_trans (A : Type) (R : relation A) (x : A) : A -> Prop :=
     t_step : forall y : A, R x y -> clos_trans A R x y
@@ -255,8 +257,8 @@ Definition ceval'_derive_multi_ceval : Prop :=
   forall fc lf c st1 st2,
   ceval fc lf c st1 st2 ->
   multi_ceval' fc lf
-    ((c, com_to_lable_pure c, st1) :: nil)
-    ((c, com_to_lable_pure c, st2) :: nil).
+    ((c, com_to_label_pure c, st1) :: nil)
+    ((c, com_to_label_pure c, st2) :: nil).
 
 Definition arbitrary_eval_derive_multi_ceval : Prop :=
   forall fc lf loc glb1 glb2 lb c stk,
@@ -267,8 +269,19 @@ Definition arbitrary_eval_derive_multi_ceval : Prop :=
     ((c, lb, (loc, glb2)) :: stk).
 
 
-Theorem ceval'_derive_multi_ceval_correct : forall fc c st1 st2,
-  ceval'_derive_multi_ceval fc c st1 st2.
+Lemma com_extension_head :
+  forall fc lf c2 l2 st4 st3 c1,
+  clos_trans restk (middle_ceval' fc lf)
+      ((c2, l2, st4) :: nil)
+      ((c2, com_to_label_pure c2, st3) :: nil) ->
+  clos_trans restk (middle_ceval' fc lf)
+      ((CSeq c1 c2, LSeq (com_to_label_pure c1) l2, st4) :: nil)
+      ((CSeq c1 c2, LSeq (com_to_label_pure c1) (com_to_label_pure c2), st3) :: nil).
+Proof.
+  intros.
+Admitted.
+
+Theorem ceval'_derive_multi_ceval_correct : ceval'_derive_multi_ceval.
 Proof.
   unfold ceval'_derive_multi_ceval.
   intros.
@@ -280,13 +293,53 @@ Proof.
     apply t_step, ME_r.
     apply E'_Ass, H.
   - simpl.
-    
+    apply Operators_Properties.clos_trans_tn1 in IHceval1.
+    apply Operators_Properties.clos_trans_t1n in IHceval2.
+    inversion IHceval1; subst; inversion IHceval2; subst.
+    + apply middle_ceval'_pure in H1.
+      apply middle_ceval'_pure in H2.
+      epose proof E'_Seq _ _ _ _ _ _ _ _ _ _ _ _ _ _ H1 H2.
+      apply t_step, ME_r.
+      exact H3.
+    + apply middle_ceval'_pure in H1.
+      inversion H2; subst.
+      * epose proof E'_Seq _ _ _ _ _ _ _ _ _ _ _ _ _ _ H1 H11.
+        Search clos_trans_1n clos_trans.
+        apply Operators_Properties.clos_t1n_trans in H3.
+        eapply com_extension_head in H3.
+        apply Operators_Properties.clos_t1n_trans.
+        eapply t1n_trans.
+        {
+          apply ME_r.
+          apply H4.
+        }
+        {
+          apply Operators_Properties.clos_trans_t1n.
+          exact H3.
+        }
+      * pose proof com_to_label_pure_no_point c2.
+        tauto.
+    + apply middle_ceval'_pure in H3.
+      inversion H1; subst.
+      * epose proof E'_Seq _ _ _ _ _ _ _ _ _ _ _ _ _ _ H8 H3.
+        admit.
+      * pose proof com_to_label_pure_no_point c1.
+        tauto.
+    + inversion H1; subst; inversion H3; subst.
+      * epose proof E'_Seq _ _ _ _ _ _ _ _ _ _ _ _ _ _ H9 H13.
+        admit.
+      * pose proof com_to_label_pure_no_point c2.
+        tauto.
+      * pose proof com_to_label_pure_no_point c1.
+        tauto.
+      * pose proof com_to_label_pure_no_point c1.
+        tauto.
     apply t_step, ME_r.
     eapply E'_Seq.
-    apply com_to_lable_pure_valid.
-    apply com_to_lable_pure_is_pure.
-    apply com_to_lable_pure_is_pure.
-    apply com_to_lable_pure_valid.
+    apply com_to_label_pure_valid.
+    apply com_to_label_pure_is_pure.
+    apply com_to_label_pure_is_pure.
+    apply com_to_label_pure_valid.
     
 (*   remember (snd (fc f)) as c.
   revert f Heqc.
