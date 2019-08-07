@@ -200,10 +200,10 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
       ceval' fc (CWhile b c) (LWhile b (com_to_lable_pure c)) l2 st3 st2 ->
       ceval' fc (CWhile b c) l1 l2 st1 st2
 
-  | E'_Reentry1c : forall fc lf st,
-      ceval' fc (CReentry lf) LPure LHere st st
-  | E'_Reentryr2 : forall fc lf st,
-      ceval' fc (CReentry lf) LHere LPure st st
+  | E'_Reentry1c : forall fc st,
+      ceval' fc CReentry LPure LHere st st
+  | E'_Reentryr2 : forall fc st,
+      ceval' fc CReentry LHere LPure st st
 .
 (** [] *)
 
@@ -211,16 +211,18 @@ Inductive ceval' : func_context -> com -> label -> label -> state -> state -> Pr
 (** Bridging basic ceval' to multi_ceval' *)
 Definition restk : Type := list (com * label * state).
 
-Inductive middle_ceval' : func_context -> restk -> restk -> Prop :=
-  | ME_r : forall fc c l1 l2 st1 st2 stk,
+Inductive middle_ceval' : func_context -> public_funcs -> restk -> restk -> Prop :=
+  | ME_r : forall fc c l1 l2 st1 st2 stk lf,
       ceval' fc c l1 l2 st1 st2 ->
-      middle_ceval' fc ((c, l1, st1) :: stk) ((c, l2, st2) :: stk)
-  | ME_re : forall fc c1 c2 l1 loc1 loc2 glb stk,
+      middle_ceval' fc lf ((c, l1, st1) :: stk) ((c, l2, st2) :: stk)
+  | ME_re : forall fc c1 c2 l1 loc1 loc2 glb stk lf f,
+      In f lf ->
+      c2 = snd (fc f) ->
       single_point l1 ->
-      middle_ceval' fc ((c1, l1, (loc1, glb)) :: stk)
+      middle_ceval' fc lf ((c1, l1, (loc1, glb)) :: stk)
         ((c2, com_to_lable_pure c2, (loc2, glb)) :: (c1, l1, (loc1, glb)) :: stk)
-  | ME_ex : forall fc c1 c2 l2 loc1 loc2 glb1 glb2 stk,
-      middle_ceval' fc
+  | ME_ex : forall fc c1 c2 l2 loc1 loc2 glb1 glb2 stk lf,
+      middle_ceval' fc lf
         ((c1, (com_to_lable_pure c1), (loc1, glb1)) :: (c2, l2, (loc2, glb2)) :: stk)
         ((c2, l2, (loc2, glb1)) :: stk).
 
@@ -230,16 +232,16 @@ Inductive clos_trans (A : Type) (R : relation A) (x : A) : A -> Prop :=
     t_step : forall y : A, R x y -> clos_trans A R x y
   | t_trans : forall y z : A, clos_trans A R x y -> clos_trans A R y z -> clos_trans A R x z
 *)
-Definition multi_ceval' (fc : func_context) : restk -> restk -> Prop :=
-  clos_trans restk (middle_ceval' fc).
+Definition multi_ceval' (fc : func_context) (lf : public_funcs) : restk -> restk -> Prop :=
+  clos_trans restk (middle_ceval' fc lf).
 
-Lemma middle_ceval'_pure : forall fc c l1 l2 st1 st2,
-  middle_ceval' fc ((c, l1, st1) :: nil) ((c, l2, st2) :: nil) ->
+Lemma middle_ceval'_pure : forall fc c l1 l2 st1 st2 lf,
+  middle_ceval' fc lf ((c, l1, st1) :: nil) ((c, l2, st2) :: nil) ->
   ceval' fc c l1 l2 st1 st2.
 Proof.
   intros.
   inversion H; subst.
-  exact H2.
+  exact H3.
 Qed.
 (** [] *)
 
@@ -249,28 +251,21 @@ Check ceval.
 Check multi_ceval'.
 Print ceval.
 
-Definition ceval'_derive_multi_ceval (fc : func_context) (c : com) (st1 st2 : state) : Prop :=
-  ceval fc c st1 st2 ->
-  multi_ceval' fc
+Definition ceval'_derive_multi_ceval : Prop :=
+  forall fc lf c st1 st2,
+  ceval fc lf c st1 st2 ->
+  multi_ceval' fc lf
     ((c, com_to_lable_pure c, st1) :: nil)
     ((c, com_to_lable_pure c, st2) :: nil).
 
-(* Definition arbitrary_eval
-  arbitrary_eval fc lf loc glb1 glb2 ->
+Definition arbitrary_eval_derive_multi_ceval : Prop :=
+  forall fc lf loc glb1 glb2 lb c stk,
   single_point lb ->
-  multi_ceval' fc
+  arbitrary_eval fc lf loc glb1 glb2 ->
+  multi_ceval' fc lf
     ((c, lb, (loc, glb1)) :: stk)
-    ((c, lb, (loc, glb2)) :: stk) *)
+    ((c, lb, (loc, glb2)) :: stk).
 
-(* 
-Definition ceval_multi_derive_ceval' (fc : func_context) (f : func) (st1 st2 : state) : Prop :=
-  multi_ceval' fc
-    ((f, com_to_lable_pure (snd (fc f)), st1) :: nil)
-    ((f, com_to_lable_pure (snd (fc f)), st2) :: nil) ->
-  ceval fc (snd (fc f)) st1 st2.
- *)
-(* Scheme eval_abeval := Minimality for ceval Sort Prop
-  with abeval_eval := Minimality for arbitrary_eval Sort Prop. *)
 
 Theorem ceval'_derive_multi_ceval_correct : forall fc c st1 st2,
   ceval'_derive_multi_ceval fc c st1 st2.
@@ -305,113 +300,6 @@ Proof.
     rewrite <- Heqc.
     apply E'_Ass, H.
   - simpl.
-Admitted. *)
-
-Theorem ceval_multi_derive_ceval'_correct : forall fc f st1 st2,
-  ceval_multi_derive_ceval' fc f st1 st2.
-Proof.
-  unfold ceval_multi_derive_ceval', multi_ceval'.
-  intros.
-
-   inversion H; subst.
-  {
-    apply middle_ceval'_pure in H0.
-    remember (snd (fc f)) as c.
-    clear Heqc H.
-    generalize dependent st2. revert st1.
-    induction c; intros;
-     inversion H0; subst;
-    try (pose proof com_to_lable_pure_no_point c1;
-         congruence);
-    try (pose proof com_to_lable_pure_no_point c2;
-         congruence);
-    try (pose proof com_to_lable_pure_no_point c;
-         congruence).
-    - apply E_Skip.
-    - apply E_Ass. reflexivity.
-    - apply IHc1 in H13.
-      apply IHc2 in H14.
-      eapply E_Seq;
-      [apply H13 | apply H14].
-    - apply IHc1 in H11.
-      apply (E_IfTrue _ _ _ _ _ _ H10).
-      apply H11.
-    - apply IHc2 in H11.
-      apply (E_IfFalse _ _ _ _ _ _ H10).
-      apply H11.
-    - apply E_WhileFalse.
-      apply H2.
-    - apply IHc in H6.
-      eapply E_WhileTrue.
-      apply H4. apply H6.
-      admit.
-    - pose proof com_to_lable_pure_no_point (CWhile b c);
-      congruence.
-  }
-  {
-    remember (snd (fc f)) as c.
-    clear H.
-    generalize dependent y.
-    revert st1 st2.
-    induction c; intros; simpl in *.
-    - inversion H0; inversion H1; subst.
-      + inversion H; inversion H3; subst;
-        try (rewrite <- Heqc in * ).
-        * inversion H9; inversion H13; inversion H12; subst.
-          apply E_Skip.
-        * inversion H11.
-        * inversion H12.
-        * inversion H9.
-      + inversion H; subst.
-        rewrite <- Heqc in *.
-        Abort.
-
-(*   remember ((f, com_to_lable_pure (snd (fc f)), st1) :: nil) as stk1.
-  remember ((f, com_to_lable_pure (snd (fc f)), st2) :: nil) as stk2.
-  generalize dependent st1.
-  generalize dependent st2.
-  induction H; intros; subst.
-  {
-    apply middle_ceval'_pure in H.
-    remember (snd (fc f)) as c.
-    clear Heqc.
-    generalize dependent st2. revert st1.
-    induction c; intros;
-     inversion H; subst;
-    try (pose proof com_to_lable_pure_no_point c1;
-         congruence);
-    try (pose proof com_to_lable_pure_no_point c2;
-         congruence);
-    try (pose proof com_to_lable_pure_no_point c;
-         congruence).
-    - apply E_Skip.
-    - apply E_Ass. reflexivity.
-    - apply IHc1 in H13.
-      apply IHc2 in H14.
-      eapply E_Seq;
-      [apply H13 | apply H14].
-    - apply IHc1 in H11.
-      apply (E_IfTrue _ _ _ _ _ _ H10).
-      apply H11.
-    - apply IHc2 in H11.
-      apply (E_IfFalse _ _ _ _ _ _ H10).
-      apply H11.
-    - apply E_WhileFalse.
-      apply H2.
-    - apply IHc in H6.
-      eapply E_WhileTrue.
-      apply H4. apply H6.
-      admit.
-    - pose proof com_to_lable_pure_no_point (CWhile b c);
-      congruence.
-  }
-  {
-    
-  }
-  induction c.
-  - simpl in H.
-    inversion H.
-    +
 Admitted. *)
 (** [] *)
 

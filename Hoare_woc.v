@@ -37,28 +37,28 @@ Definition localp (P : Assertion) : Prop :=
     P (loc, glb1) -> P (loc, glb2).
 
 
-Definition hoare_triple (fc : func_context) (P : Assertion) (c : com) (Q : Assertion) : Prop :=
-  forall st1 st2, 
-    ceval fc c st1 st2 ->
-    P st1 ->
-    Q st2.
-
-Definition func_triple (fc : func_context) (P : Assertion) (f : func) (Q : Assertion) : Prop :=
+Definition hoare_triple (fc : func_context) (lf : public_funcs) (P : Assertion) (c : com) (Q : Assertion) : Prop :=
   forall st1 st2,
-    ceval fc (snd (fc f)) st1 st2 ->
+    ceval fc lf c st1 st2 ->
     P st1 ->
     Q st2.
 
-Notation "'|' fc '|' '{{' P '}}' c '{{' Q '}}'" := (hoare_triple fc P c Q) (at level 90, c at next level).
+Definition func_triple (fc : func_context) (lf : public_funcs) (P : Assertion) (f : func) (Q : Assertion) : Prop :=
+  forall st1 st2,
+    ceval fc lf (snd (fc f)) st1 st2 ->
+    P st1 ->
+    Q st2.
+
+Notation "'|' fc ',' lf '|' '{{' P '}}' c '{{' Q '}}'" := (hoare_triple fc lf P c Q) (at level 90, c at next level).
 
 Definition pv_to_assertion (fc : func_context) (f : func) (pv : list aexp) (P : Assertion) : Assertion :=
   fun st => P (param_to_local_state st (fst (fc f)) pv, snd st).
 
-Theorem hoare_consequence : forall fc P P' Q Q' c,
+Theorem hoare_consequence : forall fc lf P P' Q Q' c,
   P |-- P' ->
-  |fc| {{P'}} c {{Q'}} ->
+  |fc, lf| {{P'}} c {{Q'}} ->
   Q' |-- Q ->
-  |fc| {{P}} c {{Q}}.
+  |fc, lf| {{P}} c {{Q}}.
 Proof.
   intros.
   unfold hoare_triple. intros.
@@ -67,9 +67,9 @@ Proof.
   exact H4.
 Qed.
 
-Lemma ceval_deterministic : forall fc c st1 st2 st3,
-  ceval fc c st1 st2 ->
-  ceval fc c st1 st3 ->
+(* Lemma ceval_deterministic : forall fc lf c st1 st2 st3,
+  ceval fc lf c st1 st2 ->
+  ceval fc lf c st1 st3 ->
   st2 = st3.
 Proof.
   intros. revert H0. revert st3.
@@ -93,14 +93,14 @@ Proof.
     rewrite H7. apply H10.
   - admit.
 (*  - admit.*)
-Admitted.
+Admitted. *)
 
 Theorem hoare_reentry : forall fc lf P I,
   localp P ->
   globalp I ->
   (forall f, In f lf ->
-      func_triple fc I f I) ->
-  |fc| {{ P AND I }} CReentry lf {{ P AND I }}.
+      func_triple fc lf I f I) ->
+  |fc, lf| {{ P AND I }} CReentry {{ P AND I }}.
 Proof.
   unfold localp, globalp, hoare_triple, func_triple.
   intros.
@@ -109,10 +109,10 @@ Proof.
   unfold andp in *.
   destruct H3.
   split; [eapply H; apply H3 | ].
-  induction H6.
-  - exact H4.
-  - pose proof H0 _ loc1 _ H4.
-    pose proof H1 f H5 _ _ H6 H8.
+  induction H4.
+  - exact H5.
+  - pose proof H0 _ loc1 _ H5.
+    pose proof H1 f H4 _ _ H6 H8.
     apply (H0 _ loc _) in H9.
     apply E_Reentry in H7.
     pose proof IHarbitrary_eval H1 (H _ _ _ H3) H9 H7.

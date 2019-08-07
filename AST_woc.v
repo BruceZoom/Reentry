@@ -30,7 +30,7 @@ Inductive com : Type :=
   | CSeq (c1 c2 : com)
   | CIf (b : bexp) (c1 c2 : com)
   | CWhile (b : bexp) (c : com)
-  | CReentry (lf : list func).
+  | CReentry.
 (** [] *)
 
 (** State Model *)
@@ -80,6 +80,8 @@ Fixpoint beval (st : state) (b : bexp) : bool :=
 Definition func_context : Type := func -> (list ident) * com.
 
 Definition empty_func : (list ident) * com := (nil, CSkip).
+
+Definition public_funcs : Type := list func.
 (** [] *)
 
 (** Function Support *)
@@ -95,40 +97,40 @@ Fixpoint param_to_local_state (st : state) (prm_name : list ident) (prm_value : 
 (** [] *)
 
 (** Denotational Semantics *)
-Inductive ceval : func_context -> com -> state -> state -> Prop :=
-  | E_Skip : forall fc st,
-      ceval fc CSkip st st
-  | E_Ass : forall fc st X a n,
+Inductive ceval : func_context -> public_funcs -> com -> state -> state -> Prop :=
+  | E_Skip : forall fc st lf,
+      ceval fc lf CSkip st st
+  | E_Ass : forall fc st X a n lf,
       aeval st a = n ->
-      ceval fc (CAss X a) st (update_state st X n)
-  | E_Seq : forall fc c1 c2 st1 st2 st3,
-      ceval fc c1 st1 st2 ->
-      ceval fc c2 st2 st3 ->
-      ceval fc (CSeq c1 c2) st1 st3
-  | E_IfTrue : forall fc b c1 c2 st1 st2,
+      ceval fc lf (CAss X a) st (update_state st X n)
+  | E_Seq : forall fc c1 c2 st1 st2 st3 lf,
+      ceval fc lf c1 st1 st2 ->
+      ceval fc lf c2 st2 st3 ->
+      ceval fc lf (CSeq c1 c2) st1 st3
+  | E_IfTrue : forall fc b c1 c2 st1 st2 lf,
       beval st1 b = true ->
-      ceval fc c1 st1 st2 ->
-      ceval fc (CIf b c1 c2) st1 st2
-  | E_IfFalse : forall fc b c1 c2 st1 st2,
+      ceval fc lf c1 st1 st2 ->
+      ceval fc lf (CIf b c1 c2) st1 st2
+  | E_IfFalse : forall fc b c1 c2 st1 st2 lf,
       beval st1 b = false ->
-      ceval fc c2 st1 st2 ->
-      ceval fc (CIf b c1 c2) st1 st2
-  | E_WhileFalse : forall fc b c st,
+      ceval fc lf c2 st1 st2 ->
+      ceval fc lf (CIf b c1 c2) st1 st2
+  | E_WhileFalse : forall fc b c st lf,
       beval st b = false ->
-      ceval fc (CWhile b c) st st
-  | E_WhileTrue : forall fc b c st1 st2 st3,
+      ceval fc lf (CWhile b c) st st
+  | E_WhileTrue : forall fc b c st1 st2 st3 lf,
       beval st1 b = true ->
-      ceval fc c st1 st2 ->
-      ceval fc (CWhile b c) st2 st3 ->
-      ceval fc (CWhile b c) st1 st3
-  | E_Reentry : forall fc lf loc glb1 glb2,
+      ceval fc lf c st1 st2 ->
+      ceval fc lf (CWhile b c) st2 st3 ->
+      ceval fc lf (CWhile b c) st1 st3
+  | E_Reentry : forall fc loc glb1 glb2 lf,
       arbitrary_eval fc lf loc glb1 glb2 ->
-      ceval fc (CReentry lf) (loc, glb1) (loc, glb2)
+      ceval fc lf CReentry (loc, glb1) (loc, glb2)
 with arbitrary_eval: forall (fc: func_context) (lf: list func) (loc : unit_state), unit_state -> unit_state -> Prop :=
   | ArE_nil: forall fc lf loc gl, arbitrary_eval fc lf loc gl gl
   | ArE_cons: forall fc lf loc loc1 loc2 gl1 gl2 gl3 f,
                 In f lf ->
-                ceval fc (snd (fc f)) (loc1, gl1) (loc2, gl2) ->
+                ceval fc lf (snd (fc f)) (loc1, gl1) (loc2, gl2) ->
                 arbitrary_eval fc lf loc gl2 gl3 ->
                 arbitrary_eval fc lf loc gl1 gl3.
 (** [] *)
