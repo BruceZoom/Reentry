@@ -1195,22 +1195,6 @@ Proof.
     pose proof com_to_label_pure_no_point c; congruence.
     pose proof eq_refl (length (stk ++ (c, Some l1, st2) :: nil)).
     rewrite <- H3, app_length in H0 at 1. simpl in H0. omega.
-(*     + eapply E'_WhileTrue1, ME_r_single, rt_step in H11.
-      exact H11.
-      apply SP_While, H1.
-      apply com_to_label_pure_is_pure.
-      assumption.
-      assumption.
-    + pose proof eq_refl (length (stk ++ (c, Some l1, st2) :: nil)).
-      rewrite <- H10 in H2 at 1.
-      rewrite app_length in H2.
-      simpl in H2. omega.
-    + pose proof eq_refl (length (stk ++ (c, Some l1, st2) :: nil)).
-      rewrite <- H10 in H2 at 1.
-      rewrite app_length in H2.
-      simpl in H2. omega.
-    + pose proof com_to_label_pure_no_point c.
-      congruence. *)
   - inversion H0; subst.
     + destruct stk; simpl in *; inversion H3; subst; clear H3.
       pose proof IHclos_refl_trans_n1 l1 H2 st2 ((c0, Some l0, st0) :: stk) (eq_refl _).
@@ -1269,68 +1253,94 @@ Qed.
 (** While Loop *)
 
 (** Elevate *)
+Lemma middle_ceval'_elevate:
+  forall stk fc lf stk1 stk2,
+  middle_ceval' fc lf stk1 stk2 ->
+    middle_ceval' fc lf (stk1 ++ stk) (stk2 ++ stk).
+Proof.
+  intros.
+  inversion H; subst.
+  - apply ME_r_pure. exact H0.
+  - apply ME_r_single; assumption.
+  - eapply ME_re; try assumption.
+    exact H0. auto.
+  - apply ME_ex. exact H0.
+Qed.
+
 Lemma multi_ceval'_elevate:
   forall fc lf c l1 l2 st1 st2 stk,
   multi_ceval' fc lf ((c, l1, st1) :: nil) ((c, l2, st2) :: nil) ->
   multi_ceval' fc lf ((c, l1, st1) :: stk) ((c, l2, st2) :: stk).
 Proof.
-(*   intros.
+  intros.
   set (stk' := @nil (com * option label * state)).
-  unfold stk'.
   change ((c, l1, st1) :: nil) with (stk' ++ (c, l1, st1) :: nil) in H.
   change ((c, l1, st1) :: stk) with (stk' ++ (c, l1, st1) :: stk).
-  remember ((c, l2, st2) :: nil) as stk2.
-  remember (stk' ++ (c, l1, st1) :: nil) as stk1.
   clearbody stk'.
-  
   apply Operators_Properties.clos_rt_rt1n in H.
+  apply Operators_Properties.clos_rt1n_rt.
+  remember (stk' ++ (c, l1, st1) :: nil) as stk1.
+  remember ((c, l2, st2) :: nil) as stk2.
   generalize dependent c.
-  revert l1 l2 st1 st2 stk'.
+  revert l1 st1 stk'.
   induction H; intros; subst.
+  - destruct stk'; inversion Heqstk2; subst.
+    apply rt1n_refl.
+    pose proof eq_refl (length (stk' ++ (c, l1, st1) :: nil)).
+    rewrite H1, app_length in H at 1. simpl in H. omega.
   - inversion H; subst.
-    + destruct stk'; inversion H0; subst.
-      apply rt_step, ME_r_pure, H4.
-      pose proof eq_refl (length (stk' ++ (c, l1, st1) :: nil)).
-      rewrite <- H3 in H1 at 1.
-      rewrite app_length in H1.
-      simpl in H1. omega.
-    + destruct stk'; inversion H0; subst.
-      apply rt_step, ME_r_single, H8.
-      exact H5.
-      pose proof eq_refl (length (stk' ++ (c, l1, st1) :: nil)).
-      rewrite <- H3 in H1 at 1.
-      rewrite app_length in H1.
-      simpl in H1. omega.
-    + destruct stk'; inversion H0; subst.
-      destruct stk'; inversion H3; subst.
-      clear H0 H3.
-      simpl. eapply rt_step, ME_ex.
-      exact H4.
-      pose proof eq_refl (length (stk' ++ (c, l1, st1) :: nil)).
-      rewrite <- H5 in H1 at 1.
-      rewrite app_length in H1.
-      simpl in H1. omega.
-  - inversion H; subst.
-    + eapply ME_r_pure in H4.
-      apply Operators_Properties.clos_rt1n_rt.
-      eapply rt1n_rt.
-      exact H4.
-      apply Operators_Properties.clos_rt_rt1n.
-      eapply IHclos_refl_trans_1n; apply eq_refl.
-    + eapply ME_r_single in H9.
-      apply Operators_Properties.clos_rt1n_rt.
-      eapply rt1n_rt.
-      exact H9.
-      apply Operators_Properties.clos_rt_rt1n.
-      eapply IHclos_refl_trans_1n; apply eq_refl.
-      exact H8.
-    + eapply rt_trans.
-      2:{
-        apply IHclos_refl_trans_1n.
-      apply Operators_Properties.clos_rt1n_rt.
-      eapply rt1n_rt. *)
-      
-Admitted.
+    + destruct stk'; inversion H1; subst.
+      * inversion H0; subst.
+        2:{ inversion H2. }
+        apply (middle_ceval'_elevate stk) in H.
+        apply Operators_Properties.clos_rt_rt1n, rt_step.
+        exact H.
+      * pose proof IHclos_refl_trans_1n l1 st1 ((c0, None, st3) :: stk') c (eq_refl _) (eq_refl _).
+        eapply rt1n_trans.
+        2:{ exact H2. }
+        assert ((c, l1, st1) :: stk = (c, l1, st1) :: nil ++ stk). auto.
+        rewrite H3. repeat rewrite app_comm_cons. repeat rewrite app_assoc.
+        apply middle_ceval'_elevate; assumption.
+    + destruct stk'; inversion H1; subst.
+      * apply (middle_ceval'_elevate stk) in H.
+        eapply rt1n_trans.
+        exact H.
+        change (((c, Some l3, st3) :: nil) ++ stk) with (nil ++ (c, Some l3, st3) :: stk).
+        apply IHclos_refl_trans_1n; auto.
+      * pose proof IHclos_refl_trans_1n l1 st1 ((c0, Some l3, st3) :: stk') c (eq_refl _) (eq_refl _).
+        eapply rt1n_trans.
+        2:{ exact H3. }
+        assert ((c, l1, st1) :: stk = (c, l1, st1) :: nil ++ stk). auto.
+        rewrite H4. repeat rewrite app_comm_cons. repeat rewrite app_assoc.
+        apply middle_ceval'_elevate; assumption.
+    + destruct stk'; inversion H1; subst.
+      * apply (middle_ceval'_elevate stk) in H.
+        eapply rt1n_trans.
+        exact H.
+        change (((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c, Some l0, (loc1, glb)) :: nil) ++ stk) with (((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: nil) ++ (c, Some l0, (loc1, glb)) :: stk).
+        rewrite <- app_nil_l.
+        apply IHclos_refl_trans_1n; auto.
+      * pose proof IHclos_refl_trans_1n l1 st1 ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c1, Some l0, (loc1, glb)) :: stk') c (eq_refl _) (eq_refl _).
+        eapply rt1n_trans.
+        2:{ exact H3. }
+        assert ((c, l1, st1) :: stk = (c, l1, st1) :: nil ++ stk). auto.
+        rewrite H4. repeat rewrite app_comm_cons. repeat rewrite app_assoc.
+        apply middle_ceval'_elevate; assumption.
+    + destruct stk'; inversion H1; subst.
+      destruct stk'; inversion H5; subst.
+      * apply (middle_ceval'_elevate stk) in H.
+        eapply rt1n_trans.
+        exact H.
+        change (((c, Some l0, (loc2, glb1)) :: nil) ++ stk) with (nil ++ (c, Some l0, (loc2, glb1)) :: stk).
+        rewrite <- app_nil_l.
+        apply IHclos_refl_trans_1n; auto.
+      * pose proof IHclos_refl_trans_1n l1 st1 ((c2, Some l0, (loc2, glb1)) :: stk') c (eq_refl _) (eq_refl _).
+        eapply rt1n_trans.
+        2:{ exact H2. }
+        assert ((c, l1, st1) :: stk = (c, l1, st1) :: nil ++ stk). auto.
+        rewrite H3. repeat rewrite app_comm_cons. repeat rewrite app_assoc.
+        apply middle_ceval'_elevate; assumption.
+Qed.
 (** Elevate *)
 
 Definition ceval_derive_multi_ceval' : Prop :=
@@ -1347,22 +1357,18 @@ Definition arbitrary_eval_derive_multi_ceval' : Prop :=
     ((c, Some lb, (loc, glb1)) :: stk)
     ((c, Some lb, (loc, glb2)) :: stk).
 
-Theorem ceval_derive_multi_ceval'_correct :
-  forall fc lf c st1 st2,
+Theorem Hgoal1 : forall fc lf c st1 st2,
     ceval fc lf c st1 st2 ->
     multi_ceval' fc lf
       ((c, Some (com_to_label_pure c), st1) :: nil)
       ((c, None, st2) :: nil)
-with arbitrary_eval_derive_multi_ceval'_correct :
-  forall fc lf loc glb1 glb2 lb c stk,
-  single_point lb ->
-  arbitrary_eval fc lf loc glb1 glb2 ->
-  multi_ceval' fc lf
-    ((c, Some lb, (loc, glb1)) :: stk)
-    ((c, Some lb, (loc, glb2)) :: stk).
+  with Hgoal2 : forall fc lf loc glb1 glb2 lb c ,
+    single_point lb ->
+    arbitrary_eval fc lf loc glb1 glb2 ->
+    multi_ceval' fc lf
+      ((c, Some lb, (loc, glb1)) :: nil)
+      ((c, Some lb, (loc, glb2)) :: nil).
 Proof.
-rename ceval_derive_multi_ceval'_correct into Hgoal1.
-rename arbitrary_eval_derive_multi_ceval'_correct into Hgoal2.
 {
   intros.
   clear Hgoal1.
@@ -1554,17 +1560,34 @@ Unshelve.
   apply IP_While, com_to_label_pure_is_pure.
   left; apply com_to_label_pure_is_pure.
 }
-rename ceval_derive_multi_ceval'_correct into Hgoal1.
-rename arbitrary_eval_derive_multi_ceval'_correct into Hgoal2.
 {
   intros.
   clear Hgoal2.
-  inversion H0; subst.
-  - admit.
-  - apply Hgoal1 in H2.
-    admit.
+  induction H0; subst.
+  - apply rt_refl.
+  - apply Hgoal1 in H1.
+    eapply rt_trans.
+    {
+      apply rt_step.
+      eapply ME_re.
+      exact H0.
+      apply eq_refl.
+      exact H.
+    }
+    eapply rt_trans.
+    {
+      apply multi_ceval'_elevate.
+      exact H1.
+    }
+    eapply rt_trans.
+    {
+      apply rt_step.
+      apply ME_ex.
+      exact H.
+    }
+    exact IHarbitrary_eval.
 }
-Admitted.
+Qed.
 (** [] *)
 
 
