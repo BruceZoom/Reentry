@@ -1485,14 +1485,30 @@ Proof.
         apply middle_ceval'_elevate; assumption.
 Qed.
 (** Elevate *)
+
+(* Scheme ceval_ind := Minimality for ceval Sort Prop
+with forest_tree_ind := Minimality for arbitrary_eval Sort Prop.
+Check ceval_ind.
+Definition ceval_multi_ceval' fc lf c st1 st2 : Prop :=
+    multi_ceval' fc lf
+      ((c, Some (com_to_label_pure c), st1) :: nil)
+      ((c, None, st2) :: nil).
+Definition arbitrary_eval_multi_ceval' fc lf loc glb1 glb2 : Prop :=
+    forall lb c,
+      single_point lb ->
+      multi_ceval' fc lf
+        ((c, Some lb, (loc, glb1)) :: nil)
+        ((c, Some lb, (loc, glb2)) :: nil). *)
+
 Theorem ceval_multi_ceval' : forall fc lf c st1 st2,
     ceval fc lf c st1 st2 ->
     multi_ceval' fc lf
       ((c, Some (com_to_label_pure c), st1) :: nil)
       ((c, None, st2) :: nil)
-  with arbitrary_eval_multi_ceval' : forall fc lf loc glb1 glb2 lb c ,
-    single_point lb ->
+  with arbitrary_eval_multi_ceval' : forall fc lf loc glb1 glb2,
     arbitrary_eval fc lf loc glb1 glb2 ->
+    forall lb c,
+    single_point lb ->
     multi_ceval' fc lf
       ((c, Some lb, (loc, glb1)) :: nil)
       ((c, Some lb, (loc, glb2)) :: nil).
@@ -1679,11 +1695,11 @@ Proof.
     + eapply rt_trans.
       2:{ exact IHarbitrary_eval. }
       apply arbitrary_eval_multi_ceval'.
-      apply SP_Here.
       eapply ArE_cons.
       exact H.
       exact H0.
       apply ArE_nil.
+      apply SP_Here.
 Unshelve.
   apply IP_While, com_to_label_pure_is_pure.
   left; apply com_to_label_pure_is_pure.
@@ -1691,16 +1707,16 @@ Unshelve.
 {
   intros.
   clear arbitrary_eval_multi_ceval'.
-  induction H0; subst.
+  induction H.
   - apply rt_refl.
   - apply ceval_multi_ceval' in H1.
     eapply rt_trans.
     {
       apply rt_step.
       eapply ME_re.
-      exact H0.
-      apply eq_refl.
       exact H.
+      apply eq_refl.
+      exact H0.
     }
     eapply rt_trans.
     {
@@ -1711,7 +1727,7 @@ Unshelve.
     {
       apply rt_step.
       apply ME_ex.
-      exact H.
+      exact H0.
     }
     exact IHarbitrary_eval.
 }
