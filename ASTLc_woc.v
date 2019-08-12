@@ -1076,10 +1076,81 @@ Lemma middle_ceval'_else_branch_some:
     (stk1 ++ (c2, Some l1, st1) :: nil)
     (stk2 ++ (c2, Some l2, st2) :: nil) ->
   middle_ceval' fc lf
-    (stk1 ++ (CIf b c1 c2, Some (LIf b (com_to_label_pure c2) l1), st1) :: nil)
-    (stk2 ++ (CIf b c1 c2, Some (LIf b (com_to_label_pure c2) l2), st2) :: nil).
+    (stk1 ++ (CIf b c1 c2, Some (LIf b (com_to_label_pure c1) l1), st1) :: nil)
+    (stk2 ++ (CIf b c1 c2, Some (LIf b (com_to_label_pure c1) l2), st2) :: nil).
 Proof.
-Admitted.
+  intros.
+  destruct stk1, stk2; simpl in *.
+  - inversion H0; subst.
+    eapply E'_If2, ME_r_single in H10.
+    apply H10.
+    apply SP_If2.
+    apply com_to_label_pure_is_pure.
+    exact H5.
+    exact H.
+    right. exact H5.
+  - inversion H0; subst.
+    + pose proof eq_refl (@length (com * option label * state) nil).
+      rewrite H9 in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+    + pose proof eq_refl (@length (com * option label * state) nil).
+      rewrite H9 in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+    + destruct stk2; simpl in *.
+      2:{
+        pose proof (eq_refl (length ((c2, Some l1, (loc1, glb)) :: nil))).
+        rewrite H9 in H1 at 1.
+        simpl in H1.
+        rewrite app_length in H1.
+        simpl in H1. omega.
+      }
+      inversion H9; subst; clear H9.
+      eapply ME_re.
+      exact H6.
+      auto.
+      apply SP_If2.
+      apply com_to_label_pure_is_pure. exact H11.
+  - inversion H0; subst.
+    + pose proof eq_refl (@length (com * option label * state) nil).
+      rewrite <- H9 in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+    + destruct stk1; simpl in *.
+      2:{
+        pose proof (eq_refl (length ((c2, Some l2, (loc2, glb2)) :: nil))).
+        rewrite H5 in H1 at 1.
+        simpl in H1.
+        rewrite app_length in H1.
+        simpl in H1. omega.
+      }
+      inversion H5; subst.
+      eapply ME_ex.
+      apply SP_If2.
+      apply com_to_label_pure_is_pure. exact H4.
+  - inversion H0; subst.
+    + apply app_inj_tail in H7 as [? ?];
+      inversion H2; subst; clear H2.
+      eapply ME_r_pure in H4.
+      exact H4.
+    + apply app_inj_tail in H7 as [? ?];
+      inversion H2; subst; clear H2.
+      eapply ME_r_single in H8.
+      exact H8. exact H6.
+    + rewrite app_comm_cons in H6.
+      apply app_inj_tail in H6 as [? ?];
+      inversion H2; subst; clear H2.
+      eapply ME_re.
+      exact H7.
+      auto.
+      exact H9.
+    + rewrite app_comm_cons in H5.
+      apply app_inj_tail in H5 as [? ?];
+      inversion H2; subst; clear H2.
+      eapply ME_ex.
+      exact H4.
+Qed.
 
 Lemma multi_ceval'_else_branch:
   forall fc lf b c1 c2 l1 st3 st2,
@@ -1091,7 +1162,79 @@ Lemma multi_ceval'_else_branch:
     ((CIf b c1 c2, Some (LIf b (com_to_label_pure c1) l1), st3) :: nil)
     ((CIf b c1 c2, None, st2) :: nil).
 Proof.
-Admitted.
+  intros.
+  apply Operators_Properties.clos_rt_rt1n in H0.
+  set (stk := @nil (com * option label * state)).
+  unfold stk.
+  change ((c2, Some l1, st3) :: nil) with (stk ++ (c2, Some l1, st3) :: nil) in H0.
+  change ((CIf b c1 c2, Some (LIf b (com_to_label_pure c1) l1), st3) :: nil) with (stk ++ (CIf b c1 c2, Some (LIf b (com_to_label_pure c1) l1), st3) :: nil).
+  clearbody stk.
+  remember (stk ++ (c2, Some l1, st3) :: nil) as stk1.
+  remember ((c2, None, st2) :: nil) as stk2.
+  generalize dependent stk.
+  revert st3.
+  generalize dependent l1.
+  induction H0; intros; subst.
+  - destruct stk; simpl in *; inversion H; subst; inversion Heqstk1;
+    try (pose proof eq_refl (length (stk ++ (c2, Some (LSeq l0 l2), st3) :: nil)); rewrite <- H4, app_length in H2 at 1; simpl in H2; omega);
+    try (pose proof eq_refl (length (stk ++ (c2, Some (LIf b0 l0 l2), st3) :: nil)); rewrite <- H4, app_length in H2 at 1; simpl in H2; omega).
+    pose proof eq_refl (length (stk ++ (c2, Some LHere, st3) :: nil)).
+    rewrite <- H2, app_length in H0 at 1. simpl in H0. omega.
+    pose proof eq_refl (length (stk ++ (c2, Some (LWhile b0 l), st3) :: nil)); rewrite <- H3, app_length in H1 at 1; simpl in H1; omega.
+  - specialize (IHclos_refl_trans_1n (eq_refl _)).
+    inversion H; subst.
+    + destruct stk; simpl in *; inversion H2; subst.
+      * inversion H0; subst.
+        apply rt_step, ME_r_pure, E'_If2.
+        exact H1. apply com_to_label_pure_valid. exact H5.
+        inversion H3.
+      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((c, None, st0) :: stk) (eq_refl _).
+        repeat rewrite app_comm_cons in H.
+        eapply middle_ceval'_else_branch_some, rt_step in H.
+        eapply rt_trans.
+        exact H. exact H3. exact H1.
+    + destruct stk; simpl in *; inversion H2; subst; clear H2.
+      * pose proof IHclos_refl_trans_1n l2 H3 st0 nil (eq_refl _).
+        rewrite <- app_nil_l in H.
+        rewrite <- (@app_nil_l (com * option label * state)) in H at 1.
+        eapply middle_ceval'_else_branch_some, rt_step in H.
+        simpl in *.
+        eapply rt_trans.
+        exact H. exact H2. exact H1.
+      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((c, Some l2, st0) :: stk) (eq_refl _).
+        repeat rewrite app_comm_cons in H.
+        eapply middle_ceval'_else_branch_some, rt_step in H.
+        eapply rt_trans.
+        exact H. exact H2. exact H1.
+    + destruct stk; simpl in *; inversion H2; subst; clear H2.
+      * pose proof IHclos_refl_trans_1n l1 H1 (loc1, glb) ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: nil) (eq_refl _).
+        rewrite <- (@app_nil_l (_ * _ * _)) in H at 1.
+        rewrite (@cons_insert_nil (_ * _ * (_ * _))), app_comm_cons in H.
+        eapply middle_ceval'_else_branch_some, rt_step in H.
+        simpl in *.
+        eapply rt_trans.
+        exact H. exact H2. exact H1.
+      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c0, Some l0, (loc1, glb)) :: stk) (eq_refl _).
+        repeat rewrite app_comm_cons in H.
+        eapply middle_ceval'_else_branch_some, rt_step in H.
+        simpl in *.
+        eapply rt_trans.
+        exact H. exact H2. exact H1.
+    + destruct stk; simpl in *; inversion H2; subst; clear H2.
+      destruct stk; simpl in *; inversion H6; subst; clear H6.
+      * pose proof IHclos_refl_trans_1n l1 H1 (loc2, glb1) nil (eq_refl _).
+        rewrite cons_insert_nil, app_comm_cons in H.
+        rewrite <- app_nil_l in H.
+        eapply middle_ceval'_else_branch_some, rt_step in H.
+        simpl in *.
+        eapply rt_trans.
+        exact H. exact H2. exact H1.
+      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((c3, Some l2, (loc2, glb1)) :: stk) (eq_refl _).
+        repeat rewrite app_comm_cons in H.
+        eapply middle_ceval'_else_branch_some, rt_step in H.
+        eapply rt_trans; [apply H | apply H2].
+        exact H1.
+Qed.
 (** Else Branch *)
 
 (** While Loop *)
@@ -1342,27 +1485,12 @@ Proof.
         apply middle_ceval'_elevate; assumption.
 Qed.
 (** Elevate *)
-
-Definition ceval_derive_multi_ceval' : Prop :=
-  forall fc lf c st1 st2,
-  ceval fc lf c st1 st2 ->
-  multi_ceval' fc lf
-    ((c, Some (com_to_label_pure c), st1) :: nil)
-    ((c, None, st2) :: nil).
-
-Definition arbitrary_eval_derive_multi_ceval' : Prop :=
-  forall fc lf loc glb1 glb2 lb c stk,
-  arbitrary_eval fc lf loc glb1 glb2 ->
-  multi_ceval' fc lf
-    ((c, Some lb, (loc, glb1)) :: stk)
-    ((c, Some lb, (loc, glb2)) :: stk).
-
-Theorem Hgoal1 : forall fc lf c st1 st2,
+Theorem ceval_multi_ceval' : forall fc lf c st1 st2,
     ceval fc lf c st1 st2 ->
     multi_ceval' fc lf
       ((c, Some (com_to_label_pure c), st1) :: nil)
       ((c, None, st2) :: nil)
-  with Hgoal2 : forall fc lf loc glb1 glb2 lb c ,
+  with arbitrary_eval_multi_ceval' : forall fc lf loc glb1 glb2 lb c ,
     single_point lb ->
     arbitrary_eval fc lf loc glb1 glb2 ->
     multi_ceval' fc lf
@@ -1371,7 +1499,7 @@ Theorem Hgoal1 : forall fc lf c st1 st2,
 Proof.
 {
   intros.
-  clear Hgoal1.
+  clear ceval_multi_ceval'.
   induction H.
   - simpl.
     apply rt_step, ME_r_pure.
@@ -1550,7 +1678,7 @@ Proof.
       apply E'_Reentryr2.
     + eapply rt_trans.
       2:{ exact IHarbitrary_eval. }
-      apply Hgoal2.
+      apply arbitrary_eval_multi_ceval'.
       apply SP_Here.
       eapply ArE_cons.
       exact H.
@@ -1562,10 +1690,10 @@ Unshelve.
 }
 {
   intros.
-  clear Hgoal2.
+  clear arbitrary_eval_multi_ceval'.
   induction H0; subst.
   - apply rt_refl.
-  - apply Hgoal1 in H1.
+  - apply ceval_multi_ceval' in H1.
     eapply rt_trans.
     {
       apply rt_step.
