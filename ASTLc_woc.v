@@ -324,8 +324,8 @@ Proof.
   exact H9.
 Qed.
 
-Lemma middle_ceval'_none : forall fc c l1 st1 st2 lf,
-  middle_ceval' fc lf ((c, Some l1, st1) :: nil) ((c, None, st2) :: nil) ->
+Lemma middle_ceval'_none : forall fc c l1 st1 st2 lf stk,
+  middle_ceval' fc lf ((c, Some l1, st1) :: stk) ((c, None, st2) :: stk) ->
   ceval' fc c l1 (com_to_label_pure c) st1 st2.
 Proof.
   intros.
@@ -339,21 +339,6 @@ Qed.
 Check ceval.
 Check multi_ceval'.
 Print ceval.
-
-Definition ceval'_derive_multi_ceval : Prop :=
-  forall fc lf c st1 st2,
-  ceval fc lf c st1 st2 ->
-  multi_ceval' fc lf
-    ((c, Some (com_to_label_pure c), st1) :: nil)
-    ((c, None, st2) :: nil).
-
-Definition arbitrary_eval_derive_multi_ceval : Prop :=
-  forall fc lf loc glb1 glb2 lb c stk,
-  single_point lb ->
-  arbitrary_eval fc lf loc glb1 glb2 ->
-  multi_ceval' fc lf
-    ((c, Some lb, (loc, glb1)) :: stk)
-    ((c, Some lb, (loc, glb2)) :: stk).
 
 (** Seq Head *)
 Lemma middle_ceval'_seq_head1:
@@ -1250,48 +1235,106 @@ Proof.
         eapply t_trans.
         exact H3. exact H0. exact H2.
 Qed.
-
-(* Lemma multi_ceval'_while_loop:
-  forall fc lf b c l1 st1 st2,
-  clos_trans restk (middle_ceval' fc lf)
-    ((c, Some l1, st1) :: nil)
-    ((c, None, st2) :: nil) ->
-  clos_trans restk (middle_ceval' fc lf)
-    ((CWhile b c, Some (LWhile b l1), st1) :: nil)
-    ((CWhile b c, Some (LWhile b (com_to_label_pure c)), st2) :: nil).
-Proof.
-  intros.
-  apply Operators_Properties.clos_trans_t1n in H.
-  set (stk := @nil (com * option label * state)).
-  unfold stk.
-  change ((c, Some l1, st1) :: nil) with (stk ++ (c, Some l1, st1) :: nil) in H.
-  change ((CWhile b c, Some (LWhile b l1), st1) :: nil) with (stk ++ (CWhile b c, Some (LWhile b l1), st1) :: nil).
-  clearbody stk.
-  remember (stk ++ (c, Some l1, st1) :: nil) as stk1.
-  remember ((c, None, st2) :: nil) as stk2.
-  generalize dependent stk.
-  revert st1.
-  generalize dependent l1.
-  induction H; intros; subst.
-  - destruct stk; simpl in *; inversion H; subst.
-    + pose proof ceval'_valid_label _ _ _ _ _ _ H3 as [? _].
-      destruct H0.
-(*       * eapply E'_WhileTrue2, ME_r_single in H3. admit. *)
-      * admit.
-      * admit.
-      + pose proof (eq_refl (length (stk ++ (c, Some l1, st1) :: nil))).
-      rewrite H7 in H0 at 1.
-      rewrite app_length in H0.
-      simpl in H0. omega.
-  - specialize (IHclos_trans_1n (eq_refl _)).
-    inversion H; subst.
-Admitted. *)
 (** While Loop *)
 
-Theorem ceval'_derive_multi_ceval_correct : ceval'_derive_multi_ceval.
+(** Elevate *)
+Lemma multi_ceval'_elevate:
+  forall fc lf c l1 l2 st1 st2 stk,
+  multi_ceval' fc lf ((c, l1, st1) :: nil) ((c, l2, st2) :: nil) ->
+  multi_ceval' fc lf ((c, l1, st1) :: stk) ((c, l2, st2) :: stk).
 Proof.
-  unfold ceval'_derive_multi_ceval.
+(*   intros.
+  set (stk' := @nil (com * option label * state)).
+  unfold stk'.
+  change ((c, l1, st1) :: nil) with (stk' ++ (c, l1, st1) :: nil) in H.
+  change ((c, l1, st1) :: stk) with (stk' ++ (c, l1, st1) :: stk).
+  remember ((c, l2, st2) :: nil) as stk2.
+  remember (stk' ++ (c, l1, st1) :: nil) as stk1.
+  clearbody stk'.
+  
+  apply Operators_Properties.clos_trans_t1n in H.
+  generalize dependent c.
+  revert l1 l2 st1 st2 stk'.
+  induction H; intros; subst.
+  - inversion H; subst.
+    + destruct stk'; inversion H0; subst.
+      apply t_step, ME_r_pure, H4.
+      pose proof eq_refl (length (stk' ++ (c, l1, st1) :: nil)).
+      rewrite <- H3 in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+    + destruct stk'; inversion H0; subst.
+      apply t_step, ME_r_single, H8.
+      exact H5.
+      pose proof eq_refl (length (stk' ++ (c, l1, st1) :: nil)).
+      rewrite <- H3 in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+    + destruct stk'; inversion H0; subst.
+      destruct stk'; inversion H3; subst.
+      clear H0 H3.
+      simpl. eapply t_step, ME_ex.
+      exact H4.
+      pose proof eq_refl (length (stk' ++ (c, l1, st1) :: nil)).
+      rewrite <- H5 in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+  - inversion H; subst.
+    + eapply ME_r_pure in H4.
+      apply Operators_Properties.clos_t1n_trans.
+      eapply t1n_trans.
+      exact H4.
+      apply Operators_Properties.clos_trans_t1n.
+      eapply IHclos_trans_1n; apply eq_refl.
+    + eapply ME_r_single in H9.
+      apply Operators_Properties.clos_t1n_trans.
+      eapply t1n_trans.
+      exact H9.
+      apply Operators_Properties.clos_trans_t1n.
+      eapply IHclos_trans_1n; apply eq_refl.
+      exact H8.
+    + eapply t_trans.
+      2:{
+        apply IHclos_trans_1n.
+      apply Operators_Properties.clos_t1n_trans.
+      eapply t1n_trans. *)
+      
+Admitted.
+(** Elevate *)
+
+Definition ceval_derive_multi_ceval' : Prop :=
+  forall fc lf c st1 st2,
+  ceval fc lf c st1 st2 ->
+  multi_ceval' fc lf
+    ((c, Some (com_to_label_pure c), st1) :: nil)
+    ((c, None, st2) :: nil).
+
+Definition arbitrary_eval_derive_multi_ceval' : Prop :=
+  forall fc lf loc glb1 glb2 lb c stk,
+  arbitrary_eval fc lf loc glb1 glb2 ->
+  multi_ceval' fc lf
+    ((c, Some lb, (loc, glb1)) :: stk)
+    ((c, Some lb, (loc, glb2)) :: stk).
+
+Theorem ceval_derive_multi_ceval'_correct :
+  forall fc lf c st1 st2,
+    ceval fc lf c st1 st2 ->
+    multi_ceval' fc lf
+      ((c, Some (com_to_label_pure c), st1) :: nil)
+      ((c, None, st2) :: nil)
+with arbitrary_eval_derive_multi_ceval'_correct :
+  forall fc lf loc glb1 glb2 lb c stk,
+  single_point lb ->
+  arbitrary_eval fc lf loc glb1 glb2 ->
+  multi_ceval' fc lf
+    ((c, Some lb, (loc, glb1)) :: stk)
+    ((c, Some lb, (loc, glb2)) :: stk).
+Proof.
+rename ceval_derive_multi_ceval'_correct into Hgoal1.
+rename arbitrary_eval_derive_multi_ceval'_correct into Hgoal2.
+{
   intros.
+  clear Hgoal1.
   induction H.
   - simpl.
     apply t_step, ME_r_pure.
@@ -1310,7 +1353,8 @@ Proof.
       exact H3.
     + apply middle_ceval'_none in H1.
       inversion H2; subst.
-      * inversion H3; inversion H4.
+(*       * inversion H3; inversion H4; subst. *)
+      * admit.
       * assert (valid_label l2) as Htmp. right. assumption.
       pose proof E'_Seq fc c1 c2 (com_to_label_pure c1) (com_to_label_pure c1) (com_to_label_pure c2) l2 _ _ _ (com_to_label_pure_valid _) (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) Htmp H1 H12.
         clear Htmp.
@@ -1478,12 +1522,43 @@ Proof.
       * inversion H22.
         pose proof com_to_label_pure_no_point c.
         congruence.
-  - admit.
+  - simpl in *.
+    apply Operators_Properties.clos_t1n_trans.
+    eapply t1n_trans.
+    eapply ME_r_single.
+    2:{ apply E'_Reentry1c. }
+    apply SP_Here.
+    induction H.
+    + apply t1n_step, ME_r_pure.
+      apply E'_Reentryr2.
+    + apply Operators_Properties.clos_trans_t1n.
+      eapply t_trans.
+      2:{
+        apply Operators_Properties.clos_t1n_trans.
+        exact IHarbitrary_eval.
+      }
+      apply Hgoal2.
+      apply SP_Here.
+      eapply ArE_cons.
+      exact H.
+      exact H0.
+      apply ArE_nil.
 Unshelve.
   inversion H3; inversion H4; assumption.
   left. apply com_to_label_pure_is_pure.
   inversion H3; inversion H4; assumption.
   right; assumption.
+}
+rename ceval_derive_multi_ceval'_correct into Hgoal1.
+rename arbitrary_eval_derive_multi_ceval'_correct into Hgoal2.
+{
+  intros.
+  clear Hgoal2.
+  inversion H0; subst.
+  - admit.
+  - apply Hgoal1 in H2.
+    admit.
+}
 Admitted.
 (*   remember (snd (fc f)) as c.
   revert f Heqc.
