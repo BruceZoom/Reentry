@@ -342,26 +342,7 @@ Check ceval.
 Check multi_ceval'.
 Print ceval.
 
-(** Seq Head *)
-Lemma middle_ceval'_seq_head1:
-  forall l1 fc lf c2 st1 st2 stk c1,
-  single_point l1 ->
-  middle_ceval' fc lf
-    ((c2, Some l1, st1) :: stk)
-    ((c2, None, st2) :: stk) ->
-  middle_ceval' fc lf
-    ((CSeq c1 c2, Some (LSeq (com_to_label_pure c1) l1), st1) :: stk)
-    ((CSeq c1 c2, None, st2) :: stk).
-Proof.
-  intros.
-  inversion H0; subst.
-  eapply E'_Seq2 in H4.
-  - apply ME_r_pure.
-    exact H4.
-  - exact H.
-  - apply com_to_label_pure_valid.
-Qed.
-
+(** Properties of List *)
 Lemma increase_one_side {A : Type}:
   forall (a : A) l l',
   ~(l' ++ a :: l = l).
@@ -390,6 +371,35 @@ Proof.
     rewrite app_length in H1.
     simpl in H1.
     omega.
+Qed.
+
+Lemma cons_insert_nil {A : Type} :
+  forall (a : A) l,
+  a :: l = a :: nil ++ l.
+Proof.
+  intros.
+  auto.
+Qed.
+(** [] *)
+
+(** Seq Head *)
+Lemma middle_ceval'_seq_head1:
+  forall l1 fc lf c2 st1 st2 stk c1,
+  single_point l1 ->
+  middle_ceval' fc lf
+    ((c2, Some l1, st1) :: stk)
+    ((c2, None, st2) :: stk) ->
+  middle_ceval' fc lf
+    ((CSeq c1 c2, Some (LSeq (com_to_label_pure c1) l1), st1) :: stk)
+    ((CSeq c1 c2, None, st2) :: stk).
+Proof.
+  intros.
+  inversion H0; subst.
+  eapply E'_Seq2 in H4.
+  - apply ME_r_pure.
+    exact H4.
+  - exact H.
+  - apply com_to_label_pure_valid.
 Qed.
 
 Lemma middle_ceval'_seq_head2:
@@ -571,14 +581,6 @@ Proof.
       apply app_inj_tail in H5.
       destruct H5.
       inversion H2.
-Qed.
-
-Lemma cons_insert_nil {A : Type} :
-  forall (a : A) l,
-  a :: l = a :: nil ++ l.
-Proof.
-  intros.
-  auto.
 Qed.
 
 Lemma multi_ceval'_seq_head:
@@ -844,7 +846,7 @@ Proof.
         eapply middle_ceval'_seq_tail, rt_step in H.
         inversion H0; subst.
         exact H.
-        epose proof IHclos_refl_trans_n1 l0 _ c2 nil st2 (eq_refl _).
+        pose proof IHclos_refl_trans_n1 l0 ltac: (inversion H2; assumption) c2 nil st2 (eq_refl _).
         simpl in *.
         eapply rt_trans.
         exact H5. exact H. exact H3.
@@ -894,8 +896,6 @@ Proof.
         eapply middle_ceval'_seq_tail, rt_step in H.
         eapply rt_trans.
         exact H2. exact H. exact H1.
-Unshelve.
-  inversion H2; assumption.
 Qed.
 (** Seq Tail *)
 
@@ -1399,7 +1399,7 @@ Qed.
 Lemma middle_ceval'_elevate:
   forall stk fc lf stk1 stk2,
   middle_ceval' fc lf stk1 stk2 ->
-    middle_ceval' fc lf (stk1 ++ stk) (stk2 ++ stk).
+  middle_ceval' fc lf (stk1 ++ stk) (stk2 ++ stk).
 Proof.
   intros.
   inversion H; subst.
@@ -1486,19 +1486,6 @@ Proof.
 Qed.
 (** Elevate *)
 
-(* Scheme ceval_ind := Minimality for ceval Sort Prop
-with forest_tree_ind := Minimality for arbitrary_eval Sort Prop.
-Check ceval_ind.
-Definition ceval_multi_ceval' fc lf c st1 st2 : Prop :=
-    multi_ceval' fc lf
-      ((c, Some (com_to_label_pure c), st1) :: nil)
-      ((c, None, st2) :: nil).
-Definition arbitrary_eval_multi_ceval' fc lf loc glb1 glb2 : Prop :=
-    forall lb c,
-      single_point lb ->
-      multi_ceval' fc lf
-        ((c, Some lb, (loc, glb1)) :: nil)
-        ((c, Some lb, (loc, glb2)) :: nil). *)
 
 Theorem ceval_multi_ceval' : forall fc lf c st1 st2,
     ceval fc lf c st1 st2 ->
@@ -1547,15 +1534,15 @@ Proof.
           eapply multi_ceval'_seq_tail in H2.
           eapply rt_trans.
           apply H2.
-          epose proof E'_Seq _ _ _ _ _ _ _ _ _ _ _ _ _ _ H9 H13.
+          pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ ltac: (right; exact H6) (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) (com_to_label_pure_valid _) H9 H13.
           apply rt_step, ME_r_pure, H7.
           exact H6.
         }
-        Unshelve.
+(*         Unshelve.
         right. exact H6.
         apply com_to_label_pure_is_pure.
         apply com_to_label_pure_is_pure.
-        apply com_to_label_pure_valid.
+        apply com_to_label_pure_valid. *)
       * pose proof ceval'_valid_label _ _ _ _ _ _ H9 as [Htmp1 _].
         pose proof ceval'_valid_label _ _ _ _ _ _ H14 as [_ Htmp2].
         pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ Htmp1 (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) Htmp2 H9 H14.
@@ -1642,7 +1629,7 @@ Proof.
       2:{ inversion H4. }
       inversion H3; subst.
       {
-        epose proof E'_WhileTrue2 _ _ _ _ _ _ _ _ _ _ H H10 H20.
+        pose proof E'_WhileTrue2 _ _ _ _ _ _ _ _  ltac: (apply IP_While, com_to_label_pure_is_pure) (com_to_label_pure_valid _) H H10 H20.
         eapply rt_step, ME_r_pure, H4.
       }
       {
@@ -1683,31 +1670,24 @@ Proof.
       pose proof com_to_label_pure_no_point c.
       congruence.
   - simpl in *.
+    apply Operators_Properties.clos_rtn1_rt.
+    eapply rtn1_trans.
+    eapply ME_r_pure.
+    apply E'_Reentryr2.
+    apply Operators_Properties.clos_rt_rtn1.
     apply Operators_Properties.clos_rt1n_rt.
     eapply rt1n_trans.
-    eapply ME_r_single.
+    apply ME_r_single.
     2:{ apply E'_Reentry1c. }
     apply SP_Here.
     apply Operators_Properties.clos_rt_rt1n.
-    induction H.
-    + apply rt_step, ME_r_pure.
-      apply E'_Reentryr2.
-    + eapply rt_trans.
-      2:{ exact IHarbitrary_eval. }
-      apply arbitrary_eval_multi_ceval'.
-      eapply ArE_cons.
-      exact H.
-      exact H0.
-      apply ArE_nil.
-      apply SP_Here.
-Unshelve.
-  apply IP_While, com_to_label_pure_is_pure.
-  left; apply com_to_label_pure_is_pure.
+    apply arbitrary_eval_multi_ceval'.
+    exact H. apply SP_Here.
 }
 {
   intros.
   clear arbitrary_eval_multi_ceval'.
-  induction H.
+  induction H; subst.
   - apply rt_refl.
   - apply ceval_multi_ceval' in H1.
     eapply rt_trans.
@@ -1733,22 +1713,3 @@ Unshelve.
 }
 Qed.
 (** [] *)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
