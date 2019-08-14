@@ -3,24 +3,11 @@ Require Import AST_woc.
 Require Import ASTLc_woc.
 Require Import Hoare_woc.
 
+Definition top (fc : func_context) (f : func) : label :=
+  com_to_label_pure (snd (fc f)).
 
-Definition LContSet := list (label * Assertion).
-
-Definition hoare_triple' (fc : func_context) (P : LContSet) (c : com) (Q : LContSet) : Prop :=
-  forall st1 st2 l1 l2 p q,
-    In (l1, p) P ->
-    In (l2, q) Q ->
-    ceval' fc c l1 l2 st1 st2 ->
-    p st1 ->
-    q st2.
-
-Definition func_triple' (fc : func_context) (P : LContSet) (f : func) (Q : LContSet) : Prop :=
-  forall st1 st2 l1 l2 p q,
-    In (l1, p) P ->
-    In (l2, q) Q ->
-    ceval' fc (snd (fc f)) l1 l2 st1 st2 ->
-    p st1 ->
-    q st2.
+Definition bottom (fc : func_context) (f : func) : label :=
+  com_to_label_pure (snd (fc f)).
 
 Inductive matched_label : label -> com -> Prop :=
   | ML_Skip : matched_label LPure CSkip
@@ -39,28 +26,84 @@ Inductive matched_label : label -> com -> Prop :=
   | ML_Reentry_here : matched_label LHere CReentry
   | ML_Reentry_pure : matched_label LPure CReentry.
 
-Definition top (fc : func_context) (f : func) : label :=
-  com_to_label_pure (snd (fc f)).
+Definition valid_index_label (fc : func_context) (lf : list func) (f : func) (lb : label) : Prop :=
+  In f lf /\ single_point lb /\ matched_label lb (snd (fc f)).
 
-Definition bottom (fc : func_context) (f : func) : label :=
-  com_to_label_pure (snd (fc f)).
-
-Definition index : Type := (func * label).
-Print sig.
-Print sigT.
-Search sig.
-Definition valid_index (fc : func_context) (lf : list func) (idx : index) : Prop :=
-  In (fst idx) lf /\ matched_label (snd idx) (snd (fc (fst idx))).
+Definition index_label_set (fc : func_context) (lf : list func) (f : func) : Type :=
+  sig (valid_index_label fc lf f).
 
 Definition index_set (fc : func_context) (lf : list func) : Type :=
-  sig (valid_index fc lf).
+  sigT (index_label_set fc lf).
 
 Definition param_type (fc : func_context) (lf : list func) : Type :=
   index_set fc lf -> Type.
 
-Definition invariant (fc : func_context) (lf : list func) (pt : param_type fc lf) : Type := forall i : index_set fc lf, (pt i) -> Assertion.
+Definition rAssertion (fc : func_context) (lf : list func) (pt : param_type fc lf) : Type :=
+  forall i: index_set fc lf, (pt i) -> Assertion.
 
 Definition index_relation (fc : func_context) (lf : list func) (pt : param_type fc lf) : Type := forall i j : index_set fc lf, (pt i) -> (pt j) -> Prop.
+
+Definition func_triple' (fc : func_context) (lf : list func) (P : Assertion) (f : func) (Q : Assertion) (pt : param_type fc (f :: lf)) (R1 R2 : rAssertion fc (f :: lf) pt): Prop := forall (params : forall i : index_set fc (f :: lf), (pt i)),
+    forall st1 st2,
+      ceval' fc (snd (fc f)) (top fc f) (bottom fc f) st1 st2 ->
+      P st1 ->
+      Q st2
+ /\ forall st1 st2 (i: index_set fc (f :: lf)),
+      ceval' fc (snd (fc f)) (top fc f) (proj1_sig (projT2 i)) st1 st2 ->
+      P st1 ->
+      R2 i (params i) st2
+ /\ forall st1 st2 (i: index_set fc (f :: lf)),
+      ceval' fc (snd (fc f)) (proj1_sig (projT2 i)) (bottom fc f) st1 st2 ->
+      R1 i (params i) st1 ->
+      Q st2
+ /\ forall st1 st2 (i1 i2: index_set fc (f :: lf)),
+      ceval' fc (snd (fc f)) (proj1_sig (projT2 i1)) (proj1_sig (projT2 i2)) st1 st2 ->
+      R1 i1 (params i1) st1 ->
+      R2 i2 (params i2) st2.
+
+Search sig.
+
+(* Definition param_type_subset (fc : func_context) (lf1 lf2 : list func) (pt1 : param_type fc lf1) (pt2 : param_type fc lf2) : Prop :=
+  forall f,
+    (In f lf1 -> In f lf2)
+ /\ forall (lb : label) (lb2: index_label_set fc lf2 f),
+      pt1 (existT (index_label_set fc lf1) f (exist (index_label_set fc lf1) lb)) = pt2 (existT (index_label_set fc lf2) f lb2). *)
+
+Theorem reentry_invariant :
+  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt),
+  forall f',
+  In f' lf ->
+  forall (i: index_set fc (f :: lf)) (x: pt i) (j: index_set fc (f' :: nil)),
+  func_triple
+  
+  forall (i: index_set fc (f :: lf)) (x: pt i) pt' invs',
+  
+  func_triple' fc (invs i x) f' (invs i x) pt' invs'.
+
+
+
+Definition label_param_type (fc : func_context) (lf : list func) (f : func) : Type :=
+  index_label_set fc lf f -> Type.
+
+Definition label_invariants (fc : func_context) (lf : list func) (f : func) (pt : label_param_type fc lf f) : Type := forall i : index_label_set fc lf f, (pt i) -> Assertion.
+
+
+Definition func_triple' (fc : func_context) (P : Assertion) (f : func) (Q : Assertion) (pt : label_param_type fc (f :: nil) f) (invs : label_invariants fc (f :: nil) f pt) (params : forall ilb: index_label_set fc (f :: nil) f, pt ilb) : Prop :=
+    forall st1 st2 (ilb: index_label_set fc (f :: nil) f),
+      ceval' fc (snd (fc f)) (top fc f) (proj1_sig ilb) st1 st2 ->
+      P st1 ->
+      invs ilb (params ilb) st2
+ /\ forall st1 st2 (ilb: index_label_set fc (f :: nil) f),
+      ceval' fc (snd (fc f)) (proj1_sig ilb) (bottom fc f) st1 st2 ->
+      invs ilb (params ilb) st1 ->
+      Q st2
+ /\ forall st1 st2 (ilb1 ilb2: index_label_set fc (f :: nil) f),
+      ceval' fc (snd (fc f)) (proj1_sig ilb1) (proj1_sig ilb2) st1 st2 ->
+      invs ilb1 (params ilb1) st1 ->
+      invs ilb2 (params ilb2) st2.
+
+
+
 
 Theorem reentry_invariant :
   forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariant fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt),
