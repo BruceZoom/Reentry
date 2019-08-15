@@ -125,31 +125,43 @@ End exp. *)
 
 (* Definition empty_rassert (fc : func_context) (f : func) : rAssertion fc f :=
   fun _ _ => False. *)
-Print restk.
-Inductive reachable_param (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (R : index_relation fc (f :: lf) pt) : forall (i j : index_set fc (f :: lf)), restk -> (pt i) -> (pt j) -> Prop :=
-  | single : forall (st1 st2 : state) i j x y,
-      R i j x y ->
-      reachable_param fc lf f pt R i j ((snd (fc (fname _ _ j)), Some (proj1_sig (index_label _ _ j)), st2) :: (snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st1) :: nil) x y
-  | multi : forall i j x y k (z : (pt k)) st stk,
-      R i j x y ->
-      reachable_param fc lf f pt R j k stk y z ->
-      reachable_param fc lf f pt R i k ((snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st) :: stk) x z.
 
-Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) : Prop :=
+Inductive reachable_param (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (R : index_relation fc (f :: lf) pt) : restk -> forall (i : index_set fc (f :: lf)), (pt i) -> Prop :=
+  | RP_single : forall st i x,
+      fname _ _ i = f ->
+      reachable_param fc lf f pt R ((snd (fc f), Some (proj1_sig (index_label _ _ i)), st) :: nil) i x
+  | RP_multi : forall st1 st2 i j x y stk,
+      R i j x y ->
+      reachable_param fc lf f pt R ((snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st1) :: stk) i x ->
+      reachable_param fc lf f pt R ((snd (fc (fname _ _ j)), Some (proj1_sig (index_label _ _ j)), st2) :: (snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st1) :: stk) j y.
+
+Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion) : Prop :=
   match stk with
-  | nil => False
+  | nil => False                          (* empty stack *)
   | (c1, l1, st1) :: stk' =>
     match stk' with
-    | nil =>
+    | nil =>                              (* only with bottom level *)
       match l1 with
-      | Some l1 => False (* FIXME *)
-      | None => False (* FIXME *)
-    | (c2, l2, st2) :: _ =>
-      match l1, l2 with
-      | Some l1, Some l2 =>
-        exists f' (H: In f' (f :: lf)) (x : FUN.index_label_set fc f'), c1 = snd (fc f') /\ l1 = proj1_sig x /\ invs {| fname := f'; fvalid := H; index_label := x |}  st1 (* FIXME *)
-      | None, Some l2 => False (* FIXME *)
-      | _, _ => False
+      | Some l1 =>
+        (is_pure l1 /\ P st1) \/          (* bottom level head *)
+        (single_point l1 /\ exists i z,   (* bottom level reentry *)
+          c1 = snd (fc (fname _ _ i)) /\
+          l1 = proj1_sig (index_label _ _ i) /\
+          invs i z st1)
+      | None => Q st1                     (* bottom level tail *)
+      end
+    | _ =>                                (* during reentry *)
+      match l1 with
+      | Some l1 =>
+        (is_pure l1 /\ exists i x,        (* current level head *)
+          reachable_param fc lf f pt R stk' i x /\ invs i x st1) \/
+        (single_point l1 /\ exists i x,   (* current level reentry *)
+          c1 = snd (fc (fname _ _ i)) /\
+          l1 = proj1_sig (index_label _ _ i) /\
+          reachable_param fc lf f pt R ((c1, Some l1, st1) :: stk') i x /\
+          invs i x st1)
+      | None => exists i x,               (* current level tail *)
+        reachable_param fc lf f pt R stk' i x /\ invs i x st1
       end
     end
   end.
@@ -174,7 +186,22 @@ Proof.
   unfold func_triple.
   intros.
   apply ceval_multi_ceval' in H1.
+
+  remember ((snd (fc f), Some (com_to_label_pure (snd (fc f))), st1) :: nil) as stk1.
+  assert (stk_to_pre fc lf f pt invs R stk1 P Q).
+  {
+    subst. simpl.
+    left.
+    split.
+    apply com_to_label_pure_is_pure.
+    exact H2.
+  }
+  clear dependent st1.
+
   apply Operators_Properties.clos_rt_rt1n in H1.
+
+  
+  
   remember ((snd (fc f), Some (com_to_label_pure (snd (fc f))), st1) :: nil) as stk1.
   remember ((snd (fc f), None, st2) :: nil) as stk2.
 (*   clear Heqstk1. *)
