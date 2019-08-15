@@ -35,16 +35,29 @@ Inductive matched_label : label -> com -> Prop :=
   | ML_Reentry_here : matched_label LHere CReentry
   | ML_Reentry_pure : matched_label LPure CReentry.
 
-Definition valid_index_label (fc : func_context) (f : func) (lb : label) : Prop :=
-  single_point lb /\ matched_label lb (snd (fc f)).
+Definition valid_index_label (fc : func_context) (c : com) (lb : label) : Prop :=
+  single_point lb /\ matched_label lb c.
 
+Module COM.
+Definition index_label_set (fc : func_context) (c : com) : Type :=
+  sig (valid_index_label fc c).
+
+Definition rAssertion (fc : func_context) (c : com) : Type :=
+  forall i: index_label_set fc c, Assertion.
+End COM.
+
+Module FUN.
 Definition index_label_set (fc : func_context) (f : func) : Type :=
-  sig (valid_index_label fc f).
+  COM.index_label_set fc (snd (fc f)).
+
+Definition rAssertion (fc : func_context) (f : func) : Type :=
+  COM.rAssertion fc (snd (fc f)).
+End FUN.
 
 Record index_set (fc : func_context) (lf : list func) : Type := {
   fname : func;
-  fname_valid : In fname lf;
-  index_label : index_label_set fc fname;
+  fvalid : In fname lf;
+  index_label : FUN.index_label_set fc fname;
 }.
 
 Definition param_type (fc : func_context) (lf : list func) : Type :=
@@ -64,28 +77,25 @@ Definition param_type (fc : func_context) (lf : list func) : Type :=
   index_set fc lf -> Type.
 *)
 
-Definition rAssertion (fc : func_context) (f : func) : Type :=
-  forall i: index_label_set fc f, Assertion.
-
 Definition invariants (fc : func_context) (lf : list func) (pt : param_type fc lf) : Type :=
   forall i: index_set fc lf, (pt i) -> Assertion.
 
 Definition index_relation (fc : func_context) (lf : list func) (pt : param_type fc lf) : Type := forall i j : index_set fc lf, (pt i) -> (pt j) -> Prop.
 
-Definition func_triple' (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : rAssertion fc f): Prop :=
+Definition func_triple' (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : FUN.rAssertion fc f): Prop :=
     (forall st1 st2,
       ceval' fc (snd (fc f)) (top fc f) (bottom fc f) st1 st2 ->
       P st1 ->
       Q st2)
- /\ (forall st1 st2 (i: index_label_set fc f),
+ /\ (forall st1 st2 (i: FUN.index_label_set fc f),
       ceval' fc (snd (fc f)) (top fc f) (proj1_sig i) st1 st2 ->
       P st1 ->
       R2 i st2)
- /\ (forall st1 st2 (i: index_label_set fc f),
+ /\ (forall st1 st2 (i: FUN.index_label_set fc f),
       ceval' fc (snd (fc f)) (proj1_sig i) (bottom fc f) st1 st2 ->
       R1 i st1 ->
       Q st2)
- /\ (forall st1 st2 (i1 i2: index_label_set fc f),
+ /\ (forall st1 st2 (i1 i2: FUN.index_label_set fc f),
       ceval' fc (snd (fc f)) (proj1_sig i1) (proj1_sig i2) st1 st2 ->
       R1 i1 st1 ->
       R2 i2 st2).
@@ -113,21 +123,33 @@ Definition invs' : rAssertion fc f' :=
   fun j st => exists y, R i {| fname := f' ; fname_valid := in_cons _ _ _ H ; index_label := j |} x y /\ invs {| fname := f' ; fname_valid := in_cons _ _ _ H ; index_label := j |} y st.
 End exp. *)
 
-Definition empty_rassert (fc : func_context) (f : func) : rAssertion fc f :=
-  fun _ _ => False.
+(* Definition empty_rassert (fc : func_context) (f : func) : rAssertion fc f :=
+  fun _ _ => False. *)
+Print restk.
+Inductive reachable_param (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (R : index_relation fc (f :: lf) pt) : forall (i j : index_set fc (f :: lf)), restk -> (pt i) -> (pt j) -> Prop :=
+  | single : forall (st1 st2 : state) i j x y,
+      R i j x y ->
+      reachable_param fc lf f pt R i j ((snd (fc (fname _ _ j)), Some (proj1_sig (index_label _ _ j)), st2) :: (snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st1) :: nil) x y
+  | multi : forall i j x y k (z : (pt k)) st stk,
+      R i j x y ->
+      reachable_param fc lf f pt R j k stk y z ->
+      reachable_param fc lf f pt R i k ((snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st) :: stk) x z.
 
-Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) : Assertion :=
+Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) : Prop :=
   match stk with
-  | nil => fun _ => False
+  | nil => False
   | (c1, l1, st1) :: stk' =>
     match stk' with
-    | nil => fun _ => False (* FIXME *)
+    | nil =>
+      match l1 with
+      | Some l1 => False (* FIXME *)
+      | None => False (* FIXME *)
     | (c2, l2, st2) :: _ =>
       match l1, l2 with
       | Some l1, Some l2 =>
-        fun st => exists  invs {| ?; In ? lf; exist ? |} (* FIXME *)
-      | None, Some l2 => fun _ => False (* FIXME *)
-      | _, _ => fun _ => False
+        exists f' (H: In f' (f :: lf)) (x : FUN.index_label_set fc f'), c1 = snd (fc f') /\ l1 = proj1_sig x /\ invs {| fname := f'; fvalid := H; index_label := x |}  st1 (* FIXME *)
+      | None, Some l2 => False (* FIXME *)
+      | _, _ => False
       end
     end
   end.
@@ -137,13 +159,13 @@ Theorem reentry_invariant :
 
   (forall f' (Hin: In f' lf) (i: index_set fc (f :: lf)) (x: pt i) invs',
     (invs' = fun j st =>
-        exists y, R i {| fname := f'; fname_valid := in_cons _ _ _ Hin; index_label := j |} x y 
-        /\ invs {| fname := f'; fname_valid := in_cons _ _ _ Hin; index_label := j |} y st) ->
+        exists y, R i {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} x y 
+        /\ invs {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st) ->
   func_triple' fc f' (invs i x) (invs i x) invs' invs') ->
 
-  (forall (invs' : rAssertion fc f),
+  (forall (invs' : FUN.rAssertion fc f),
     (invs' = fun j st =>
-        exists z, invs {| fname := f; fname_valid := in_eq _ _ ; index_label := j|} z st) ->
+        exists z, invs {| fname := f; fvalid := in_eq _ _ ; index_label := j|} z st) ->
   func_triple' fc f P Q invs' invs') ->
 
   func_triple fc lf P f Q.
