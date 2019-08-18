@@ -63,42 +63,40 @@ Record index_set (fc : func_context) (lf : list func) : Type := {
 Definition param_type (fc : func_context) (lf : list func) : Type :=
   index_set fc lf -> Type.
 
-(*
-Definition valid_index_label (fc : func_context) (lf : list func) (f : func) (lb : label) : Prop :=
-  In f lf /\ single_point lb /\ matched_label lb (snd (fc f)).
-
-Definition index_label_set (fc : func_context) (lf : list func) (f : func) : Type :=
-  sig (valid_index_label fc lf f).
-
-Definition index_set (fc : func_context) (lf : list func) : Type :=
-  sigT (index_label_set fc lf).
-
-Definition param_type (fc : func_context) (lf : list func) : Type :=
-  index_set fc lf -> Type.
-*)
-
 Definition invariants (fc : func_context) (lf : list func) (pt : param_type fc lf) : Type :=
   forall i: index_set fc lf, (pt i) -> Assertion.
 
 Definition index_relation (fc : func_context) (lf : list func) (pt : param_type fc lf) : Type := forall i j : index_set fc lf, (pt i) -> (pt j) -> Prop.
 
-Definition func_triple' (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : FUN.rAssertion fc f): Prop :=
-    (forall st1 st2,
+Definition triple_PQ (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : FUN.rAssertion fc f): Prop :=
+    forall st1 st2,
       ceval' fc (snd (fc f)) (top fc f) (bottom fc f) st1 st2 ->
       P st1 ->
-      Q st2)
- /\ (forall st1 st2 (i: FUN.index_label_set fc f),
+      Q st2.
+
+Definition triple_PR (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : FUN.rAssertion fc f): Prop :=
+    forall st1 st2 (i: FUN.index_label_set fc f),
       ceval' fc (snd (fc f)) (top fc f) (proj1_sig i) st1 st2 ->
       P st1 ->
-      R2 i st2)
- /\ (forall st1 st2 (i: FUN.index_label_set fc f),
+      R2 i st2.
+
+Definition triple_RQ (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : FUN.rAssertion fc f): Prop :=
+    forall st1 st2 (i: FUN.index_label_set fc f),
       ceval' fc (snd (fc f)) (proj1_sig i) (bottom fc f) st1 st2 ->
       R1 i st1 ->
-      Q st2)
- /\ (forall st1 st2 (i1 i2: FUN.index_label_set fc f),
+      Q st2.
+
+Definition triple_RR (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : FUN.rAssertion fc f): Prop :=
+    forall st1 st2 (i1 i2: FUN.index_label_set fc f),
       ceval' fc (snd (fc f)) (proj1_sig i1) (proj1_sig i2) st1 st2 ->
       R1 i1 st1 ->
-      R2 i2 st2).
+      R2 i2 st2.
+
+Definition func_triple' (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 : FUN.rAssertion fc f): Prop :=
+    triple_PQ fc f P Q R1 R2
+ /\ triple_PR fc f P Q R1 R2
+ /\ triple_RQ fc f P Q R1 R2
+ /\ triple_RR fc f P Q R1 R2.
 
 (* Section exp.
 (* Definition param_type_subset (fc : func_context) (lf1 lf2 : list func) (pt1 : param_type fc lf1) (pt2 : param_type fc lf2) : Prop :=
@@ -166,6 +164,60 @@ Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : para
     end
   end.
 
+Fixpoint get_bottom_com (stk : restk) : com :=
+  match stk with
+  | nil => CSkip
+  | (c, _, _) :: stk' =>
+    match stk' with
+    | nil => c
+    | _ => get_bottom_com stk'
+    end
+  end.
+
+Lemma ceval'_pure_head :
+  forall fc c l1 l2 st1 st2,
+  is_pure l1 ->
+  ceval' fc c l1 l2 st1 st2 ->
+  l1 = com_to_label_pure c.
+Proof.
+  intros.
+  induction H0; auto;
+  try (inversion H; subst;
+    pose proof IHceval'1 H6;
+    pose proof IHceval'2 H7;
+    subst; auto);
+  try (inversion H; subst;
+    try pose proof IHceval'1 H3;
+    try pose proof IHceval' H4;
+    try pose proof IHceval' H5;
+    try pose proof IHceval' H6;
+    try pose proof IHceval' H7;
+    try pose proof IHceval' H8;
+    subst; auto).
+Qed.
+
+Lemma ceval'_pure_tail :
+  forall fc c l1 l2 st1 st2,
+  is_pure l2 ->
+  ceval' fc c l1 l2 st1 st2 ->
+  l2 = com_to_label_pure c.
+Proof.
+  intros.
+  induction H0; auto;
+  try (inversion H; subst;
+    pose proof IHceval'1 H6;
+    pose proof IHceval'2 H7;
+    subst; auto);
+  try (inversion H; subst;
+    try pose proof IHceval'1 H3;
+    try pose proof IHceval' H4;
+    try pose proof IHceval' H5;
+    try pose proof IHceval' H6;
+    try pose proof IHceval' H7;
+    try pose proof IHceval' H8;
+    subst; auto).
+Qed.
+
 Theorem reentry_invariant :
   forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion),
 
@@ -188,6 +240,7 @@ Proof.
   apply ceval_multi_ceval' in H1.
 
   remember ((snd (fc f), Some (com_to_label_pure (snd (fc f))), st1) :: nil) as stk1.
+  (* Generalized precondition *)
   assert (stk_to_pre fc lf f pt invs R stk1 P Q).
   {
     subst. simpl.
@@ -196,10 +249,79 @@ Proof.
     apply com_to_label_pure_is_pure.
     exact H2.
   }
+  (* Some properties of the stack *)
+  assert (get_bottom_com stk1 = snd (fc f)).
+  {
+    subst.
+    auto.
+  }
   clear dependent st1.
 
   apply Operators_Properties.clos_rt_rt1n in H1.
-
+  remember ((snd (fc f), None, st2) :: nil) as stk2.
+(*   revert dependent f. *)
+  induction H1; intros; subst.
+  - simpl in H3. exact H3.
+  - inversion H1; subst.
+    {
+      apply IHclos_refl_trans_1n; clear IHclos_refl_trans_1n.
+      auto.
+      destruct stk; simpl.
+      - simpl in H4. subst c.
+        pose proof H0 (fun j st =>
+        exists z, invs {| fname := f; fvalid := in_eq _ _ ; index_label := j|} z st) (eq_refl _).
+        simpl in H3.
+        destruct H3; unfold func_triple' in H4.
+        + destruct H4 as [? _].
+          destruct H3.
+          eapply H4.
+          pose proof ceval'_pure_head _ _ _ _ _ _ H3 H5. subst.
+          exact H5. exact H6.
+        + destruct H3 as [? [? [? [? [? ?]]]]]. subst.
+          simpl in *.
+          destruct H4 as [_ [_ [? _]]].
+          unfold triple_RQ in H4.
+          eapply H4.
+          clear H4.
+          
+(*           apply H5.
+          (* H5 has same structure but different type parameters *) *)
+          
+(*          2:{
+            exists (pt {| fname := f; fvalid := in_eq f lf; index_label := (index_label fc (f :: lf) x) |}).
+(*           Prove second condition directly also cause problems. *) *)
+          
+          destruct x.
+          destruct index_label0.
+          simpl in *.
+          destruct fvalid0.
+          {
+            subst.
+            assert (x = proj1_sig )
+          }
+          2:{
+            
+          
+          
+          
+          assert (exists y, snd (fc f) = snd (fc (fname fc (f :: lf) y))).
+          destruct x.
+          destruct index_label0.
+          simpl in H3, H6.
+          apply H5.
+          2:{
+            exists (pt {| fname := f; fvalid := in_eq f lf; index_label := (index_label fc (f :: lf) x) |}).
+          apply H5.
+          
+          
+        
+        destruct H5 as [_ [_ [? _]]].
+        simpl in H3.
+        
+        
+        (fun (_ : COM.index_label_set fc (snd (fc f))) (_ : state) => False) =
+       (fun (j : COM.index_label_set fc (snd (fc f))) (st : state)
+    }
   
   
   remember ((snd (fc f), Some (com_to_label_pure (snd (fc f))), st1) :: nil) as stk1.
