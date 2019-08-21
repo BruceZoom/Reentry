@@ -133,7 +133,7 @@ Inductive reachable_param (fc : func_context) (lf : list func) (f : func) (pt : 
       reachable_param fc lf f pt R ((snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st1) :: stk) i x ->
       reachable_param fc lf f pt R ((snd (fc (fname _ _ j)), Some (proj1_sig (index_label _ _ j)), st2) :: (snd (fc (fname _ _ i)), Some (proj1_sig (index_label _ _ i)), st1) :: stk) j y.
 
-Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion) : Prop :=
+(* Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion) : Prop :=
   match stk with
   | nil => False                          (* empty stack *)
   | (c1, l1, st1) :: stk' =>
@@ -143,6 +143,7 @@ Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : para
       | Some l1 =>
         (is_pure l1 /\ P st1) \/          (* bottom level head *)
         (single_point l1 /\ exists i z,   (* bottom level reentry *)
+          f = fname _ _ i /\
           c1 = snd (fc (fname _ _ i)) /\
           l1 = proj1_sig (index_label _ _ i) /\
           invs i z st1)
@@ -162,7 +163,60 @@ Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : para
         reachable_param fc lf f pt R stk' i x /\ invs i x st1
       end
     end
+  end. *)
+
+Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion) : Prop :=
+  match stk with
+  | nil => False                          (* empty stack *)
+  | (c1, l1, st1) :: stk' =>
+    match stk' with
+    | nil =>                              (* only with bottom level *)
+      match l1 with
+      | Some l1 =>
+        (is_pure l1 /\ P st1) \/          (* bottom level head *)
+        (single_point l1 /\ exists i x,   (* bottom level reentry *)
+          c1 = snd (fc (fname _ _ i)) /\
+          l1 = proj1_sig (index_label _ _ i) /\
+          reachable_param fc lf f pt R ((c1, Some l1, st1) :: stk') i x /\
+          invs i x st1)
+      | None => Q st1                     (* bottom level tail *)
+      end
+    | _ =>                                (* during reentry *)
+      match l1 with
+      | Some l1 =>
+        (is_pure l1 /\ exists i x,        (* current level head *)
+          reachable_param fc lf f pt R stk' i x /\ invs i x st1) \/
+        (single_point l1 /\ exists i x,   (* current level reentry *)
+          c1 = snd (fc (fname _ _ i)) /\
+          l1 = proj1_sig (index_label _ _ i) /\
+          reachable_param fc lf f pt R ((c1, Some l1, st1) :: stk') i x /\
+          invs i x st1)
+      | None => exists i x,               (* current level tail *)
+        reachable_param fc lf f pt R stk' i x /\ invs i x st1
+      end
+    end
   end.
+
+(* Inductive stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion): forall (stk : restk), Prop :=
+| stk_to_pre_bottom_level_head: forall st,
+    P st ->
+    stk_to_pre fc lf f pt invs R P Q ((snd (fc f), Some (com_to_label_pure (snd (fc f))), st) :: nil)
+| stk_to_pre_bottom_level_tail: forall st,
+    Q st ->
+    stk_to_pre fc lf f pt invs R P Q ((snd (fc f), None, st) :: nil)
+| stk_to_pre_upper_level_head: forall c st stk i x,
+    invs i x st ->
+    reachable_param fc lf f pt R stk i x ->
+    stk_to_pre fc lf f pt invs R P Q ((c, Some (com_to_label_pure c), st) :: stk)
+| stk_to_pre_upper_level_tail: forall c st stk i x,
+    invs i x st ->
+    reachable_param fc lf f pt R stk i x ->
+    stk_to_pre fc lf f pt invs R P Q ((c, None, st) :: stk)
+| stk_to_pre_reentry: forall c l st stk i x,
+    single_point (proj1_sig (index_label _ _ i)) ->
+    invs i x st ->
+    reachable_param fc lf f pt R ((c, l, st) :: stk) i x ->
+    stk_to_pre fc lf f pt invs R P Q ((c, l, st) :: stk). *)
 
 Fixpoint get_bottom_com (stk : restk) : com :=
   match stk with
@@ -229,7 +283,7 @@ Theorem reentry_invariant :
 
   (forall (invs' : FUN.rAssertion fc f),
     (invs' = fun j st =>
-        exists z, invs {| fname := f; fvalid := in_eq _ _ ; index_label := j|} z st) ->
+        exists z, invs {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st) ->
   func_triple' fc f P Q invs' invs') ->
 
   func_triple fc lf P f Q.
@@ -277,11 +331,37 @@ Proof.
           eapply H4.
           pose proof ceval'_pure_head _ _ _ _ _ _ H3 H5. subst.
           exact H5. exact H6.
-        + destruct H3 as [? [? [? [? [? ?]]]]]. subst.
+        + destruct H3 as [? [? [? [? [? [? ?]]]]]]. subst.
           simpl in *.
           destruct H4 as [_ [_ [? _]]].
+          destruct x.
+          simpl in H6.
+          assert (fname0 = f). inversion H8. auto.
+          subst fname0.
+          simpl in *.
+          eapply H4.
+          apply H5.
+          assert (fvalid0 = in_eq f lf). apply proof_irrelevance.
+          subst.
+          exists x0.
+          apply H9.
+      - destruct H3.
+          
+          
+          destruct index_label0.
+          simpl in *.
+          rewrite <- H6 in *.
+          
+          eapply H4.
+          (@snd (list ident) com (fc fname0)) x
+          @proj1_sig label (valid_index_label fc (@snd (list ident) com (fc f))) ?i
+          
+          rewrite H6 in H4.
           unfold triple_RQ in H4.
           eapply H4.
+          rewrite <- H6 in H5.
+          apply H5.
+          apply H5.
           clear H4.
           
 (*           apply H5.
