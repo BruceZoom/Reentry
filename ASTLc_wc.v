@@ -85,31 +85,37 @@ Qed.
 
 
 (** Definition of basic ceval' *)
-Definition lsstack : Type := list (label * unit_state).
+(* Definition lsstack : Type := list (label * unit_state). *)
+Definition lbstk : Type := list label.
+Definition lcstk : Type := list unit_state.
 
-Inductive ceval' : func_context -> com -> lsstack -> lsstack -> unit_state -> unit_state -> Prop :=
+Definition pure_stk (bstk : lbstk) : Prop :=
+  forall lb, In lb bstk -> is_pure lb.
+
+Inductive ceval' : func_context -> com -> lbstk -> lbstk -> (lcstk * unit_state) -> (lcstk * unit_state) -> Prop :=
   | E'_Skip : forall fc loc glb,
-      ceval' fc CSkip ((LPure, loc) :: nil) ((LPure, loc) :: nil) glb glb
+      ceval' fc CSkip (LPure :: nil) (LPure :: nil) (loc :: nil, glb) (loc :: nil, glb)
   | E'_Ass : forall fc X a n loc1 loc2 glb1 glb2,
       aeval (loc1, glb1) a = n ->
       update_state (loc1, glb1) X n = (loc2, glb2) ->
-      ceval' fc (CAss X a) ((LPure, loc1) :: nil) ((LPure, loc2) :: nil) glb1 glb2
+      ceval' fc (CAss X a) (LPure :: nil) (LPure :: nil) (loc1 :: nil, glb1) (loc2 :: nil, glb2)
 
   | E'_Reentry1c : forall fc loc glb,
-      ceval' fc CReentry ((LPure, loc) :: nil) ((LHere, loc) :: nil) glb glb
+      ceval' fc CReentry (LPure :: nil) (LHere :: nil) (loc :: nil, glb) (loc :: nil, glb)
   | E'_Reentryr2 : forall fc loc glb,
-      ceval' fc CReentry ((LHere, loc) :: nil) ((LPure, loc) :: nil) glb glb
+      ceval' fc CReentry (LHere :: nil) (LPure :: nil) (loc :: nil, glb) (loc :: nil, glb)
 
-  | E'_CallOut : forall fc f pv stk l2 loc loc2 glb1 glb2,
+  | E'_CallOut : forall fc f pv stk l2 loc loc2 glb1 glb2 bstk cstk,
       single_point l2 ->
+      length bstk = length cstk ->
       ceval' fc (func_bdy f)
-        ((com_to_lable_pure (func_bdy f),
-          (param_to_local_state (loc, glb1) (func_arg f) pv)) :: nil)
-        (stk ++ (l2, loc2) :: nil) glb1 glb2 ->
+        (com_to_lable_pure (func_bdy f) :: nil) (bstk ++ l2 :: nil)
+        (param_to_local_state (loc, glb1) (func_arg f) pv :: nil, glb1)
+        (cstk ++ loc2 :: nil, glb2)
 (** Might be equivalent to
         ((l2, loc2) :: stk) glb1 glb2 -> *)
       ceval' fc (CCall f pv)
-        ((LPure, loc) :: nil) ((LHere, loc) :: stk ++ (l2, loc2) :: nil) glb1 glb2
+        ((LPure, loc) :: nil) ((LHere, loc) :: stk ++ (l2, loc2) :: nil) glb1 glb2。
 (** Might be equivalent to
         ((LPure, loc) :: nil) ((LHere, loc) :: (l2, loc2) :: stk) glb1 glb2 *)
   | E'_CallRet : forall fc f pv stk l1 loc loc1 loc2 glb1 glb2,
