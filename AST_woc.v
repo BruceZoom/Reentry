@@ -77,7 +77,10 @@ Fixpoint beval (st : state) (b : bexp) : bool :=
 (** [] *)
 
 (** Function Context *)
-Definition func_context : Type := func -> (list ident) * com.
+Class func_context : Type := {func_f: func -> (list ident) * com}.
+
+Definition func_arg { fc : func_context } (f : func) : list ident := fst (func_f f).
+Definition func_bdy { fc : func_context } (f : func) : com := snd (func_f f).
 
 Definition empty_func : (list ident) * com := (nil, CSkip).
 
@@ -130,7 +133,7 @@ with arbitrary_eval: forall (fc: func_context) (lf: list func) (loc : unit_state
   | ArE_nil: forall fc lf loc gl, arbitrary_eval fc lf loc gl gl
   | ArE_cons: forall fc lf loc loc1 loc2 gl1 gl2 gl3 f,
                 In f lf ->
-                ceval fc lf (snd (fc f)) (loc1, gl1) (loc2, gl2) ->
+                ceval fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) ->
                 arbitrary_eval fc lf loc gl2 gl3 ->
                 arbitrary_eval fc lf loc gl1 gl3.
 (** [] *)

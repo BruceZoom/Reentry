@@ -289,13 +289,9 @@ Inductive middle_ceval' : func_context -> public_funcs -> restk -> restk -> Prop
       single_point l2 ->
       ceval' fc c l1 l2 st1 st2 ->
       middle_ceval' fc lf ((c, Some l1, st1) :: stk) ((c, Some l2, st2) :: stk)
-(*   | ME_r_while : forall fc lf b c l1 st1 st2 stk,
-      ceval' fc (CWhile b c) l1 (com_to_label_pure (CWhile b c)) st1 st2 ->
-      middle_ceval' fc lf (((CWhile b c), Some l1, st1) :: stk)
-        (((CWhile b c), Some (com_to_label_pure (CWhile b c)), st2) :: stk) *)
   | ME_re : forall fc c1 c2 l1 loc1 loc2 glb stk lf f,
       In f lf ->
-      c2 = snd (fc f) ->
+      c2 = func_bdy f ->
       single_point l1 ->
       middle_ceval' fc lf ((c1, Some l1, (loc1, glb)) :: stk)
         ((c2, Some (com_to_label_pure c2), (loc2, glb)) :: (c1, Some l1, (loc1, glb)) :: stk)
@@ -423,7 +419,7 @@ Proof.
   - exact H.
   - right.
     exact H5.
-  - pose proof increase_one_side (snd (fc f), Some l1, (loc1, glb)) stk nil.
+  - pose proof increase_one_side (func_bdy f, Some l1, (loc1, glb)) stk nil.
     simpl in H1.
     congruence.
 Qed.
@@ -668,16 +664,16 @@ Proof.
         }
         simpl in *.
         inversion H2; subst; clear H2.
-        pose proof IHclos_refl_trans_1n (eq_refl _) l2 H1 c1 ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: nil) (loc1, glb) (eq_refl _).
+        pose proof IHclos_refl_trans_1n (eq_refl _) l2 H1 c1 ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: nil) (loc1, glb) (eq_refl _).
         assert ((c2, Some l2, (loc1, glb)) :: nil = nil ++ (c2, Some l2, (loc1, glb)) :: nil). auto.
         pose proof middle_ceval'_seq_head_some fc lf c1 c2 l2 l2 (loc1, glb) (loc1, glb) nil. simpl in H5.
-        assert ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c2, Some l2, (loc1, glb)) :: nil = ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: nil) ++ (c2, Some l2, (loc1, glb)) :: nil). auto.
+        assert ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: (c2, Some l2, (loc1, glb)) :: nil = ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: nil) ++ (c2, Some l2, (loc1, glb)) :: nil). auto.
         rewrite H6 in H; clear H6.
         eapply H5, rt_step in H.
         eapply rt_trans.
         exact H. exact H2. exact H1.
       * simpl in H2; inversion H2; subst; clear H2.
-        pose proof IHclos_refl_trans_1n (eq_refl _) l2 H1 c1 ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c0, Some l1, (loc1, glb)) :: stk) st4 (eq_refl _).
+        pose proof IHclos_refl_trans_1n (eq_refl _) l2 H1 c1 ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: (c0, Some l1, (loc1, glb)) :: stk) st4 (eq_refl _).
         rewrite app_comm_cons in H. rewrite app_comm_cons in H.
         eapply middle_ceval'_seq_head_some, rt_step in H.
         eapply rt_trans.
@@ -868,7 +864,7 @@ Proof.
           clear H2 H6.
           pose proof IHclos_refl_trans_n1 l1 H1 c2 nil (loc1, glb) (eq_refl _).
           rewrite <- (@app_nil_l (_ * _ * _)) in H at 1.
-          pose proof cons_insert_nil (snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)).
+          pose proof cons_insert_nil (func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)).
           rewrite H4, app_comm_cons in H; clear H4.
           eapply middle_ceval'_seq_tail, rt_step in H.
           eapply rt_trans.
@@ -1038,14 +1034,14 @@ Proof.
         eapply rt_trans.
         exact H. exact H2. exact H1.
     + destruct stk; simpl in *; inversion H2; subst; clear H2.
-      * pose proof IHclos_refl_trans_1n l1 H1 (loc1, glb) ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: nil) (eq_refl _).
+      * pose proof IHclos_refl_trans_1n l1 H1 (loc1, glb) ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: nil) (eq_refl _).
         rewrite <- (@app_nil_l (_ * _ * _)) in H at 1.
         rewrite (@cons_insert_nil (_ * _ * (_ * _))), app_comm_cons in H.
         eapply middle_ceval'_if_branch_some, rt_step in H.
         simpl in *.
         eapply rt_trans.
         exact H. exact H2. exact H1.
-      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c0, Some l0, (loc1, glb)) :: stk) (eq_refl _).
+      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: (c0, Some l0, (loc1, glb)) :: stk) (eq_refl _).
         repeat rewrite app_comm_cons in H.
         eapply middle_ceval'_if_branch_some, rt_step in H.
         simpl in *.
@@ -1207,14 +1203,14 @@ Proof.
         eapply rt_trans.
         exact H. exact H2. exact H1.
     + destruct stk; simpl in *; inversion H2; subst; clear H2.
-      * pose proof IHclos_refl_trans_1n l1 H1 (loc1, glb) ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: nil) (eq_refl _).
+      * pose proof IHclos_refl_trans_1n l1 H1 (loc1, glb) ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: nil) (eq_refl _).
         rewrite <- (@app_nil_l (_ * _ * _)) in H at 1.
         rewrite (@cons_insert_nil (_ * _ * (_ * _))), app_comm_cons in H.
         eapply middle_ceval'_else_branch_some, rt_step in H.
         simpl in *.
         eapply rt_trans.
         exact H. exact H2. exact H1.
-      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c0, Some l0, (loc1, glb)) :: stk) (eq_refl _).
+      * pose proof IHclos_refl_trans_1n l1 H1 st3 ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: (c0, Some l0, (loc1, glb)) :: stk) (eq_refl _).
         repeat rewrite app_comm_cons in H.
         eapply middle_ceval'_else_branch_some, rt_step in H.
         simpl in *.
@@ -1371,7 +1367,7 @@ Proof.
       destruct stk; simpl in *; inversion H7; subst; clear H7.
       * pose proof IHclos_refl_trans_n1 l1 H2 (loc1, glb) nil (eq_refl _).
         rewrite <- (@app_nil_l (_ * _ * _)) in H0 at 1.
-        rewrite (cons_insert_nil (snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb))), app_comm_cons in H0.
+        rewrite (cons_insert_nil (func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb))), app_comm_cons in H0.
         eapply middle_ceval'_while_loop, rt_step in H0.
         eapply rt_trans.
         exact H3. exact H0. exact H2.
@@ -1460,10 +1456,10 @@ Proof.
       * apply (middle_ceval'_elevate stk) in H.
         eapply rt1n_trans.
         exact H.
-        change (((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c, Some l0, (loc1, glb)) :: nil) ++ stk) with (((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: nil) ++ (c, Some l0, (loc1, glb)) :: stk).
+        change (((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: (c, Some l0, (loc1, glb)) :: nil) ++ stk) with (((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: nil) ++ (c, Some l0, (loc1, glb)) :: stk).
         rewrite <- app_nil_l.
         apply IHclos_refl_trans_1n; auto.
-      * pose proof IHclos_refl_trans_1n l1 st1 ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (c1, Some l0, (loc1, glb)) :: stk') c (eq_refl _) (eq_refl _).
+      * pose proof IHclos_refl_trans_1n l1 st1 ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: (c1, Some l0, (loc1, glb)) :: stk') c (eq_refl _) (eq_refl _).
         eapply rt1n_trans.
         2:{ exact H3. }
         assert ((c, l1, st1) :: stk = (c, l1, st1) :: nil ++ stk). auto.
@@ -1713,27 +1709,28 @@ Proof.
 }
 Qed.
 (** [] *)
+
 Lemma middle_ceval'_ctop :
   forall fc lf stk1 c l st p0 p (stk' stk'' : restk),
     multi_ceval' fc lf stk1 (p0 :: nil) ->
     stk1 = stk' ++ p :: stk'' ->
     In (c, l, st) stk' ->
-    exists f', In f' lf /\ c = (snd (fc f')).
+    exists f', In f' lf /\ c = (func_bdy f').
 Proof.
   intros ? ? ? ? ? ? ? ? ? ? ?.
   remember (p0 :: nil) as stk2.
   apply Operators_Properties.clos_rt_rt1n in H.
   revert c l st p stk' stk''.
   induction H; intros; subst.
-  - destruct stk'.
+  - intros. destruct stk'.
     inversion H0.
     inversion H.
     pose proof (eq_refl (length (stk' ++ p :: stk''))).
     rewrite <- H3 in H1 at 1.
     rewrite app_length in H1.
     simpl in H1. omega.
-  - specialize (IHclos_refl_trans_1n (eq_refl _)).
-    inversion H; subst.
+  - intros. specialize (IHclos_refl_trans_n1 (eq_refl _)).
+    inversion H; subst; intros.
     + destruct stk'.
       inversion H2.
       destruct H2.
@@ -1757,9 +1754,9 @@ Proof.
       inversion H2.
       destruct H2.
       * inversion H2; subst.
-        pose proof IHclos_refl_trans_1n c l st p ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: ((c, l, st) :: stk')) stk'' (eq_refl _) (in_cons _ _ _ (in_eq _ _)). exact H1.
+        pose proof IHclos_refl_trans_1n c l st p ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: ((c, l, st) :: stk')) stk'' (eq_refl _) (in_cons _ _ _ (in_eq _ _)). exact H1.
       * subst.
-        pose proof IHclos_refl_trans_1n c l st p ((snd (fc f), Some (com_to_label_pure (snd (fc f))), (loc2, glb)) :: (p1 :: stk')) stk'' (eq_refl _) (in_cons _ _ _ (in_cons _ _ _ H2)). exact H1.
+        pose proof IHclos_refl_trans_1n c l st p ((func_bdy f, Some (com_to_label_pure (func_bdy f)), (loc2, glb)) :: (p1 :: stk')) stk'' (eq_refl _) (in_cons _ _ _ (in_cons _ _ _ H2)). exact H1.
     + destruct stk'.
       inversion H2.
       inversion H2; subst.
@@ -1767,4 +1764,3 @@ Proof.
       destruct stk'.
       inversion H8; subst.
 Admitted.
-
