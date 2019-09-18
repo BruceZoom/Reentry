@@ -13,7 +13,6 @@ Arguments clos_refl_trans_n1 {A} _ _ _.
 Inductive label : Type :=
   | LHere
   | LPure
-  | LCall
   | LSeq (l1 : label) (l2 : label)
   | LIf (b : bexp) (l1 : label) (l2 : label)
   | LWhile (b : bexp) (l : label)
@@ -21,7 +20,6 @@ Inductive label : Type :=
 
 Inductive is_pure : label -> Prop :=
   | IP_Pure : is_pure LPure
-  | IP_Call : is_pure LCall
   | IP_Seq : forall l1 l2,
       is_pure l1 ->
       is_pure l2 ->
@@ -115,7 +113,7 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> (lcstk * unit_state)
 (** Might be equivalent to
         ((l2, loc2) :: stk) glb1 glb2 -> *)
       ceval' fc (CCall f pv)
-        ((LPure, loc) :: nil) ((LHere, loc) :: stk ++ (l2, loc2) :: nil) glb1 glb2。
+        ((LPure, loc) :: nil) ((LHere, loc) :: stk ++ (l2, loc2) :: nil) glb1 glb2
 (** Might be equivalent to
         ((LPure, loc) :: nil) ((LHere, loc) :: (l2, loc2) :: stk) glb1 glb2 *)
   | E'_CallRet : forall fc f pv stk l1 loc loc1 loc2 glb1 glb2,
