@@ -31,7 +31,7 @@ Inductive com : Type :=
   | CIf (b : bexp) (c1 c2 : com)
   | CWhile (b : bexp) (c : com)
   | CCall (f : func) (prms : list aexp)
-  | CReentry (lf : list func).
+  | CReentry.
 (** [] *)
 
 (** State Model *)
@@ -78,9 +78,14 @@ Fixpoint beval (st : state) (b : bexp) : bool :=
 (** [] *)
 
 (** Function Context *)
-Definition func_context : Type := func -> (list ident) * com.
+Class func_context : Type := {func_f: func -> (list ident) * com}.
+
+Definition func_arg { fc : func_context } (f : func) : list ident := fst (func_f f).
+Definition func_bdy { fc : func_context } (f : func) : com := snd (func_f f).
 
 Definition empty_func : (list ident) * com := (nil, CSkip).
+
+Definition public_funcs : Type := list func.
 (** [] *)
 
 (** Function Support *)
@@ -96,46 +101,52 @@ Fixpoint param_to_local_state (st : state) (prm_name : list ident) (prm_value : 
 (** [] *)
 
 (** Denotational Semantics *)
-Inductive ceval : func_context -> com -> state -> state -> Prop :=
-  | E_Skip : forall fc st,
-      ceval fc CSkip st st
-  | E_Ass : forall fc st X a n,
+Inductive ceval : func_context -> public_funcs -> com -> state -> state -> Prop :=
+  | E_Skip : forall fc lf st,
+      ceval fc lf CSkip st st
+  | E_Ass : forall fc lf st X a n,
       aeval st a = n ->
-      ceval fc (CAss X a) st (update_state st X n)
-  | E_Seq : forall fc c1 c2 st1 st2 st3,
-      ceval fc c1 st1 st2 ->
-      ceval fc c2 st2 st3 ->
-      ceval fc (CSeq c1 c2) st1 st3
-  | E_IfTrue : forall fc b c1 c2 st1 st2,
+      ceval fc lf (CAss X a) st (update_state st X n)
+  | E_Seq : forall fc lf c1 c2 st1 st2 st3,
+      ceval fc lf c1 st1 st2 ->
+      ceval fc lf c2 st2 st3 ->
+      ceval fc lf (CSeq c1 c2) st1 st3
+  | E_IfTrue : forall fc lf b c1 c2 st1 st2,
       beval st1 b = true ->
-      ceval fc c1 st1 st2 ->
-      ceval fc (CIf b c1 c2) st1 st2
-  | E_IfFalse : forall fc b c1 c2 st1 st2,
+      ceval fc lf c1 st1 st2 ->
+      ceval fc lf (CIf b c1 c2) st1 st2
+  | E_IfFalse : forall fc lf b c1 c2 st1 st2,
       beval st1 b = false ->
-      ceval fc c2 st1 st2 ->
-      ceval fc (CIf b c1 c2) st1 st2
-  | E_WhileFalse : forall fc b c st,
+      ceval fc lf c2 st1 st2 ->
+      ceval fc lf (CIf b c1 c2) st1 st2
+  | E_WhileFalse : forall fc lf b c st,
       beval st b = false ->
-      ceval fc (CWhile b c) st st
-  | E_WhileTrue : forall fc b c st1 st2 st3,
+      ceval fc lf (CWhile b c) st st
+  | E_WhileTrue : forall fc lf b c st1 st2 st3,
       beval st1 b = true ->
-      ceval fc c st1 st2 ->
-      ceval fc (CWhile b c) st2 st3 ->
-      ceval fc (CWhile b c) st1 st3
-  | E_Call : forall fc f pv loc1 glb1 glb2,
+      ceval fc lf c st1 st2 ->
+      ceval fc lf (CWhile b c) st2 st3 ->
+      ceval fc lf (CWhile b c) st1 st3
+  | E_Call : forall fc lf f pv loc1 glb1 glb2,
       (exists loc2,
-        ceval fc (snd (fc f)) ((param_to_local_state (loc1, glb1) (fst (fc f)) pv), glb1) (loc2, glb2)) ->
-      ceval fc (CCall f pv) (loc1, glb1) (loc1, glb2)
+        ceval fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2)) ->
+      ceval fc lf (CCall f pv) (loc1, glb1) (loc1, glb2)
   | E_Reentry : forall fc lf loc glb1 glb2,
       arbitrary_eval fc lf loc glb1 glb2 ->
-      ceval fc (CReentry lf) (loc, glb1) (loc, glb2)
-with arbitrary_eval: forall (fc: func_context) (lf: list func) (loc : unit_state), unit_state -> unit_state -> Prop :=
+      ceval fc lf CReentry (loc, glb1) (loc, glb2)
+with arbitrary_eval: forall (fc: func_context) (lf: public_funcs) (loc : unit_state), unit_state -> unit_state -> Prop :=
   | ArE_nil: forall fc lf loc gl, arbitrary_eval fc lf loc gl gl
-  | ArE_cons: forall fc lf loc gl1 gl2 gl3 f pv,
+  | ArE_cons: forall fc lf loc loc1 loc2 gl1 gl2 gl3 f,
                 In f lf ->
-                ceval fc (CCall f (map (fun v => ANum v) pv)) (loc, gl1) (loc, gl2) ->
+                ceval fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) ->
                 arbitrary_eval fc lf loc gl2 gl3 ->
                 arbitrary_eval fc lf loc gl1 gl3.
+
+(*   | ArE_cons: forall fc lf loc gl1 gl2 gl3 f pv,
+                In f lf ->
+                ceval fc lf (CCall f (map (fun v => ANum v) pv)) (loc, gl1) (loc, gl2) ->
+                arbitrary_eval fc lf loc gl2 gl3 ->
+                arbitrary_eval fc lf loc gl1 gl3. *)
 (** [] *)
 
 

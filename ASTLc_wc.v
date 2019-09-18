@@ -1,5 +1,6 @@
 Require Import Coq.Lists.List.
 Require Import AST_wc.
+Require Import Omega.
 
 Require Import Coq.Relations.Relation_Operators.
 Require Import Coq.Relations.Relation_Definitions.
@@ -94,16 +95,16 @@ Inductive ceval' : func_context -> com -> lsstack -> lsstack -> unit_state -> un
       update_state (loc1, glb1) X n = (loc2, glb2) ->
       ceval' fc (CAss X a) ((LPure, loc1) :: nil) ((LPure, loc2) :: nil) glb1 glb2
 
-  | E'_Reentry1c : forall fc lf loc glb,
-      ceval' fc (CReentry lf) ((LPure, loc) :: nil) ((LHere, loc) :: nil) glb glb
-  | E'_Reentryr2 : forall fc lf loc glb,
-      ceval' fc (CReentry lf) ((LHere, loc) :: nil) ((LPure, loc) :: nil) glb glb
+  | E'_Reentry1c : forall fc loc glb,
+      ceval' fc CReentry ((LPure, loc) :: nil) ((LHere, loc) :: nil) glb glb
+  | E'_Reentryr2 : forall fc loc glb,
+      ceval' fc CReentry ((LHere, loc) :: nil) ((LPure, loc) :: nil) glb glb
 
   | E'_CallOut : forall fc f pv stk l2 loc loc2 glb1 glb2,
       single_point l2 ->
-      ceval' fc (snd (fc f))
-        ((com_to_lable_pure (snd (fc f)),
-          (param_to_local_state (loc, glb1) (fst (fc f)) pv)) :: nil)
+      ceval' fc (func_bdy f)
+        ((com_to_lable_pure (func_bdy f),
+          (param_to_local_state (loc, glb1) (func_arg f) pv)) :: nil)
         (stk ++ (l2, loc2) :: nil) glb1 glb2 ->
 (** Might be equivalent to
         ((l2, loc2) :: stk) glb1 glb2 -> *)
@@ -113,24 +114,24 @@ Inductive ceval' : func_context -> com -> lsstack -> lsstack -> unit_state -> un
         ((LPure, loc) :: nil) ((LHere, loc) :: (l2, loc2) :: stk) glb1 glb2 *)
   | E'_CallRet : forall fc f pv stk l1 loc loc1 loc2 glb1 glb2,
       single_point l1 ->
-      ceval' fc (snd (fc f))
-        (stk ++ (l1, loc1) :: nil) ((com_to_lable_pure (snd (fc f)), loc2) :: nil)
+      ceval' fc (func_bdy f)
+        (stk ++ (l1, loc1) :: nil) ((com_to_lable_pure (func_bdy f), loc2) :: nil)
         glb1 glb2 ->
       ceval' fc (CCall f pv)
         ((LHere, loc) :: stk ++ (l1, loc1) :: nil) ((LPure, loc) :: nil) glb1 glb2
   | E'_CallSeg : forall fc f pv l1 l2 stk1 stk2 loc loc1 loc2 glb1 glb2,
       single_point l1 ->
       single_point l2 ->
-      ceval' fc (snd (fc f))
+      ceval' fc (func_bdy f)
         (stk1 ++ (l1, loc1) :: nil) (stk2 ++ (l2, loc2) :: nil) glb1 glb2 ->
       ceval' fc (CCall f pv)
         ((LHere, loc) :: stk1 ++ (l1, loc1) :: nil)
         ((LHere, loc) :: stk2 ++ (l2, loc2) :: nil) glb1 glb2
   | E'_CallPure : forall fc f pv loc loc2 glb1 glb2,
-      ceval' fc (snd (fc f))
-        ((com_to_lable_pure (snd (fc f)),
-          (param_to_local_state (loc, glb1) (fst (fc f)) pv)) :: nil)
-        ((com_to_lable_pure (snd (fc f)), loc2) :: nil) glb1 glb2 ->
+      ceval' fc (func_bdy f)
+        ((com_to_lable_pure (func_bdy f),
+          (param_to_local_state (loc, glb1) (func_arg f) pv)) :: nil)
+        ((com_to_lable_pure (func_bdy f), loc2) :: nil) glb1 glb2 ->
       ceval' fc (CCall f pv) ((LPure, loc) :: nil) ((LPure, loc) :: nil) glb1 glb2
 
   | E'_Seq : forall fc c1 c2 l1 l2 l3 l4 stk1 stk2 stk3 loc1 loc2 loc3 glb1 glb2 glb3,
