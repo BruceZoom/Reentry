@@ -301,8 +301,8 @@ Inductive middle_ceval' : func_context -> public_funcs -> restk -> restk -> Prop
         ((c1, None, (loc1, glb1)) :: (c2, Some l2, (loc2, glb2)) :: stk)
         ((c2, Some l2, (loc2, glb1)) :: stk).
 
-Print clos_refl_trans.
-Search clos_refl_trans.
+(* Print clos_refl_trans. *)
+(* Search clos_refl_trans. *)
 (*
 Inductive clos_refl_trans (A : Type) (R : relation A) (x : A) : A -> Prop :=
     rrt_step : forall y : A, R x y -> clos_refl_trans R x y
@@ -334,9 +334,9 @@ Qed.
 
 
 (** Equivalence between ceval & multi_ceval' *)
-Check ceval.
-Check multi_ceval'.
-Print ceval.
+(* Check ceval. *)
+(* Check multi_ceval'. *)
+(* Print ceval. *)
 
 (** Properties of List *)
 Lemma increase_one_side {A : Type}:

@@ -1,3 +1,4 @@
+# Coq generated
 .*.aux
 *.a
 *.cma
@@ -29,4 +30,9 @@ nia.cache
 nlia.cache
 nra.cache
 
+# Makefile related
+.depend
+CONFIGURE
+
+# related materials
 *.pdf
