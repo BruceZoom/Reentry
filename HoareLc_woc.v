@@ -562,6 +562,65 @@ exists y : pt {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f
     simpl in H0. omega.
 Qed.
 
+Lemma multi_ceval'_ctop :
+  forall fc lf stk1 c l st p0 p (stk' stk'' : restk),
+    multi_ceval' fc lf (p0 :: nil) stk1 ->
+    stk1 = stk' ++ p :: stk'' ->
+    In (c, l, st) stk' ->
+    exists f', In f' lf /\ c = (func_bdy f').
+Proof.
+  intros ? ? ? ? ? ? ? ? ? ? ?.
+  remember (p0 :: nil) as stk2.
+  apply Operators_Properties.clos_rt_rtn1 in H.
+  revert c l st p stk' stk''.
+  induction H; intros; subst.
+  - destruct stk'.
+    + inversion H0.
+    + pose proof eq_refl (length (p0 :: nil)).
+      rewrite H in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+  - inversion H; subst.
+    + destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c (Some l1) st1 p ((c, Some l1, st1) :: stk') stk'' eq_refl (in_eq _ _).
+        exact H2.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p ((c0, Some l1, st1) :: stk') stk'' eq_refl (in_cons _ _ _ H2).
+        exact H3.
+    + destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c (Some l1) st1 p ((c, Some l1, st1) :: stk') stk'' eq_refl (in_eq _ _).
+        exact H2.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p ((c0, Some l1, st1) :: stk') stk'' eq_refl (in_cons _ _ _ H2).
+        exact H4.
+    + remember ((c1, Some l1, (loc1, glb)) :: stk) as stk'''.
+      clear dependent stk.
+      rename stk''' into stk.
+      destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        exists f. tauto.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p stk' stk'' eq_refl H2.
+        exact H4.
+    + destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c (Some l2) (loc2, glb2) p ((c1, None, (loc1, glb1)) :: (c, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_eq _ _)).
+        exact H2.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p ((c1, None, (loc1, glb1)) :: (c2, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_cons _ _ _ H2)).
+        exact H3.
+Qed.
+
 Theorem reentry_invariant :
   forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion),
 
@@ -602,7 +661,7 @@ Proof.
   }
   (* All non-bottom com have a corresponding f' in lf *)
   (* This condition CANNOT be removed! It is used in 2 cases where stk_to_pre condition describe the transition from a lower level to the head of upper level, where reachable_param does not provide any information about the upper level. *)
-  assert (forall c l st p stk' stk'',
+  (* assert (forall c l st p stk' stk'',
             stk1 = stk' ++ p :: stk'' ->
             In (c, l, st) stk' ->
             exists f', In f' lf /\ c = (func_bdy f')) as Hctop.
@@ -613,8 +672,15 @@ Proof.
     destruct Heqstk1.
     destruct H6. subst. inversion H5.
     destruct H6. inversion H7.
+  } *)
+  remember (func_bdy f, Some (com_to_label_pure (func_bdy f)), st1) as p'.
+  assert (multi_ceval' fc lf (p' :: nil) stk1) as Hfront.
+  {
+    subst.
+    apply rt_refl.
   }
   clear dependent st1.
+  clear Heqstk1.
 
   apply Operators_Properties.clos_rt_rt1n in H1.
   remember ((func_bdy f, None, st2) :: nil) as stk2.
@@ -633,16 +699,18 @@ Proof.
           exact H3. assumption.
         (* Transition in higher level, from some point to the end *)
         * eapply reentry_higher_level; try assumption.
-          exact Hctop. assumption. assumption.
-      - intros.
-        destruct stk'.
-        inversion H6.
-        destruct H6.
-        + inversion H5; subst.
-          inversion H8; subst.
-          pose proof Hctop c0 (Some l1) st1 p ((c0, Some l1, st1) :: stk') stk'' (eq_refl _) (in_eq _ _). exact H6.
-        + inversion H5; subst.
-          pose proof Hctop c0 l st p ((c, Some l1, st1) :: stk') stk'' (eq_refl _) (in_cons _ _ _ H6). exact H7.
+          + intros.
+            eapply multi_ceval'_ctop.
+            exact Hfront.
+            exact H5.
+            exact H6.
+          + assumption.
+          + assumption.
+      - apply Operators_Properties.clos_rtn1_rt.
+        eapply rtn1_trans.
+        exact H1.
+        apply Operators_Properties.clos_rt_rtn1.
+        exact Hfront.
     }
     {
       apply IHclos_refl_trans_1n; clear IHclos_refl_trans_1n.
@@ -652,17 +720,18 @@ Proof.
           exact H3. assumption.
         (* Transition within higher level, from some point to one reentry point *)
         * eapply reentry_higher_level; try assumption.
-          exact Hctop. assumption. assumption.
-     - intros.
-      destruct stk'.
-      inversion H6.
-      inversion H7.
-      destruct H7.
-      + inversion H6; subst.
-        inversion H9; subst.
-        pose proof Hctop c0 (Some l1) st1 p ((c0, Some l1, st1) :: stk') stk'' (eq_refl _) (in_eq _ _). exact H7.
-      + inversion H6; subst.
-        pose proof Hctop c0 l st p ((c, Some l1, st1) :: stk') stk'' (eq_refl _) (in_cons _ _ _ H7). exact H8.
+          + intros.
+            eapply multi_ceval'_ctop.
+            exact Hfront.
+            exact H6.
+            exact H7.
+          + assumption.
+          + assumption.
+      - apply Operators_Properties.clos_rtn1_rt.
+        eapply rtn1_trans.
+        exact H1.
+        apply Operators_Properties.clos_rt_rtn1.
+        exact Hfront.
     }
     {
       apply IHclos_refl_trans_1n; clear IHclos_refl_trans_1n.
@@ -674,18 +743,11 @@ Proof.
          destruct H3 as [_ [? [? [? [? [? ?]]]]]];
          subst; exists x, x0;
          split; [assumption | eapply Ginv; exact H8]]]).
-      - intros.
-        remember ((c1, Some l1, (loc1, glb)) :: stk) as stk'''.
-        clear dependent stk.
-        rename stk''' into stk.
-        destruct stk'.
-        inversion H7.
-        destruct H7.
-        + inversion H5; subst.
-          inversion H9; subst.
-          exists f0. tauto.
-        + inversion H5; subst.
-          pose proof Hctop c l st p stk' stk'' (eq_refl _) H7. exact H8.
+      - apply Operators_Properties.clos_rtn1_rt.
+        eapply rtn1_trans.
+        exact H1.
+        apply Operators_Properties.clos_rt_rtn1.
+        exact Hfront.
     }
     {
       apply IHclos_refl_trans_1n; clear IHclos_refl_trans_1n.
@@ -699,15 +761,10 @@ Proof.
         repeat split;
         [eapply reachable_param_state; apply H3|
          eapply Ginv; exact H5]]).
-      - intros.
-        destruct stk'.
-        inversion H6.
-        destruct H6.
-        + inversion H5; subst.
-          inversion H8; subst.
-          pose proof Hctop c (Some l2) (loc2, glb2) p ((c1, None, (loc1, glb1)) :: (c, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_eq _ _)).
-          exact H6.
-        + inversion H5; subst.
-          pose proof Hctop c l st p ((c1, None, (loc1, glb1)) :: (c2, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_cons _ _ _ H6)). exact H7.
+      - apply Operators_Properties.clos_rtn1_rt.
+        eapply rtn1_trans.
+        exact H1.
+        apply Operators_Properties.clos_rt_rtn1.
+        exact Hfront.
     }
 Qed.
