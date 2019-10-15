@@ -21,8 +21,14 @@ Unified_FILES = \
 	AST.v Label.v ASTLc.v Hoare.v HoareLc.v \
 	$(foreach prefix, $(Relation_PREFIX), $(prefix)_woc.v $(prefix)_wc.v)
 
+HoareFunc_FILES = \
+	HoareFunc.v
+
+FuncPredicate_FILES = \
+	AST_wc.v Hoare_wc.v $(HoareFunc_FILES)
+
 FILES = \
-	$(WithoutCall_FILES) $(WithCall_FILES) $(Unified_FILES)
+	$(WithoutCall_FILES) $(WithCall_FILES) $(HoareFunc_FILES) $(Unified_FILES)
 
 $(FILES:%.v=%.vo): %.vo: %.v
 	@echo COQC $*.v
@@ -37,6 +43,9 @@ WithCall: \
 
 Unified: \
 	.depend $(Unified_FILES:%.v=%.vo)
+
+FuncPred: \
+	.depend $(FuncPredicate_FILES:%.v=%.vo)
 
 all: $(FILES:%.v=%.vo)
 

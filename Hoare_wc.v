@@ -36,6 +36,8 @@ Definition localp (P : Assertion) : Prop :=
   forall loc glb1 glb2,
     P (loc, glb1) -> P (loc, glb2).
 
+Definition pv_to_assertion (fc : func_context) (f : func) (pv : list aexp) (P : Assertion) : Assertion :=
+  fun st => P (param_to_local_state st (func_arg f) pv, snd st).
 
 Definition hoare_triple (fc : func_context) (lf : public_funcs) (P : Assertion) (c : com) (Q : Assertion) : Prop :=
   forall st1 st2, 
@@ -50,9 +52,6 @@ Definition func_triple (fc : func_context) (lf : public_funcs) (P : Assertion) (
     Q st2.
 
 Notation "'|' fc ',' lf '|' '{{' P '}}' c '{{' Q '}}'" := (hoare_triple fc lf P c Q) (at level 90, c at next level).
-
-Definition pv_to_assertion (fc : func_context) (f : func) (pv : list aexp) (P : Assertion) : Assertion :=
-  fun st => P (param_to_local_state st (func_arg f) pv, snd st).
 
 Theorem func_hoare_triple_equiv : forall fc lf f pv P Q,
   func_triple fc lf (pv_to_assertion fc f pv P) f Q <->
