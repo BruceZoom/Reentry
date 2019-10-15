@@ -58,16 +58,16 @@ Inductive single_point : label -> Prop :=
 
 Definition valid_label (l : label) : Prop := is_pure l \/ single_point l.
 
-Fixpoint com_to_lable_pure (c : com) : label :=
+Fixpoint com_to_label_pure (c : com) : label :=
   match c with
-  | CSeq c1 c2 => LSeq (com_to_lable_pure c1) (com_to_lable_pure c2)
-  | CIf b c1 c2 => LIf b (com_to_lable_pure c1) (com_to_lable_pure c2)
-  | CWhile b c => LWhile b (com_to_lable_pure c)
+  | CSeq c1 c2 => LSeq (com_to_label_pure c1) (com_to_label_pure c2)
+  | CIf b c1 c2 => LIf b (com_to_label_pure c1) (com_to_label_pure c2)
+  | CWhile b c => LWhile b (com_to_label_pure c)
   | _ => LPure
   end.
 
-Lemma com_to_lable_pure_is_pure : forall c,
-  is_pure (com_to_lable_pure c).
+Lemma com_to_label_pure_is_pure : forall c,
+  is_pure (com_to_label_pure c).
 Proof.
   intros.
   induction c.
@@ -78,6 +78,41 @@ Proof.
   - simpl. apply IP_While; assumption.
   - simpl. apply IP_Pure.
   - simpl. apply IP_Pure.
+Qed.
+
+Lemma com_to_label_pure_valid : forall c,
+  valid_label (com_to_label_pure c).
+Proof.
+  intros.
+  unfold valid_label.
+  left.
+  apply com_to_label_pure_is_pure.
+Qed.
+
+Lemma pure_no_point : forall c,
+  is_pure c ->
+  ~single_point c.
+Proof.
+  unfold not.
+  intros.
+  induction H.
+  - inversion H0.
+  - inversion H0.
+    apply (IHis_pure1 H4).
+    apply (IHis_pure2 H5).
+  - inversion H0.
+    apply (IHis_pure1 H4).
+    apply (IHis_pure2 H6).
+  - inversion H0.
+    apply (IHis_pure H2).
+Qed.
+
+Lemma com_to_label_pure_no_point : forall c,
+  ~single_point (com_to_label_pure c).
+Proof.
+  intros.
+  apply pure_no_point.
+  apply com_to_label_pure_is_pure.
 Qed.
 (** [] *)
 
@@ -110,7 +145,7 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
       single_point l2 ->
       length bstk = length sstk ->
       ceval' fc (func_bdy f)
-        (com_to_lable_pure (func_bdy f) :: nil) (bstk ++ l2 :: nil)
+        (com_to_label_pure (func_bdy f) :: nil) (bstk ++ l2 :: nil)
         (param_to_local_state (loc1, glb1) (func_arg f) pv :: nil, glb1)
         (sstk ++ loc2 :: nil, glb2) ->
 (** Might be equivalent to
@@ -124,7 +159,7 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
       single_point l1 ->
       length bstk = length sstk ->
       ceval' fc (func_bdy f)
-        (bstk ++ l1 :: nil) ((com_to_lable_pure (func_bdy f)) :: nil)
+        (bstk ++ l1 :: nil) ((com_to_label_pure (func_bdy f)) :: nil)
         (sstk ++ loc1 :: nil, glb1) (loc2 :: nil, glb2) ->
       ceval' fc (CCall f pv)
         (LHere :: bstk ++ l1 :: nil) (LPure :: nil)
@@ -142,7 +177,7 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (loc :: sstk1 ++ loc1 :: nil, glb1) (loc :: sstk2 ++ loc2 :: nil, glb2)
   | E'_CallPure : forall fc f pv loc loc2 glb1 glb2,
       ceval' fc (func_bdy f)
-        ((com_to_lable_pure (func_bdy f)) :: nil) ((com_to_lable_pure (func_bdy f)) :: nil)
+        ((com_to_label_pure (func_bdy f)) :: nil) ((com_to_label_pure (func_bdy f)) :: nil)
         ((param_to_local_state (loc, glb1) (func_arg f) pv) :: nil, glb1) (loc2 :: nil, glb2) ->
       ceval' fc (CCall f pv)
         (LPure :: nil) (LPure :: nil)
@@ -173,8 +208,8 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (l1 :: bstk1) (l2 :: bstk2)
         (sstk1, glb1) (sstk2, glb2) ->
       ceval' fc (CSeq c1 c2)
-        ((LSeq l1 (com_to_lable_pure c2)) :: bstk1)
-        ((LSeq l2 (com_to_lable_pure c2)) :: bstk2)
+        ((LSeq l1 (com_to_label_pure c2)) :: bstk1)
+        ((LSeq l2 (com_to_label_pure c2)) :: bstk2)
         (sstk1, glb1) (sstk2, glb2)
   | E'_Seq2 : forall fc c1 c2 l1 l2 glb1 glb2 bstk1 bstk2 sstk1 sstk2,
       single_point l1 ->
@@ -185,8 +220,8 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (l1 :: bstk1) (l2 :: bstk2)
         (sstk1, glb1) (sstk2, glb2) ->
       ceval' fc (CSeq c1 c2)
-        ((LSeq (com_to_lable_pure c1) l1) :: bstk1)
-        ((LSeq (com_to_lable_pure c1) l2) :: bstk2)
+        ((LSeq (com_to_label_pure c1) l1) :: bstk1)
+        ((LSeq (com_to_label_pure c1) l2) :: bstk2)
         (sstk1, glb1) (sstk2, glb2)
 
   | E'_IfTrue : forall fc b c1 c2 l1 l2 loc1 glb1 glb2 bstk sstk,
@@ -198,8 +233,8 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (l1 :: nil) (l2 :: bstk)
         (loc1 :: nil, glb1) (sstk, glb2) ->
       ceval' fc (CIf b c1 c2)
-        ((LIf b l1 (com_to_lable_pure c2)) :: nil)
-        ((LIf b l2 (com_to_lable_pure c2)) :: bstk)
+        ((LIf b l1 (com_to_label_pure c2)) :: nil)
+        ((LIf b l2 (com_to_label_pure c2)) :: bstk)
         (loc1 :: nil, glb1) (sstk, glb2)
   | E'_IfFalse : forall fc b c1 c2 l1 l2 loc1 glb1 glb2 bstk sstk,
       is_pure l1 ->
@@ -210,8 +245,8 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (l1 :: nil) (l2 :: bstk)
         (loc1 :: nil, glb1) (sstk, glb2) ->
       ceval' fc (CIf b c1 c2)
-        ((LIf b (com_to_lable_pure c1) l1) :: nil)
-        ((LIf b (com_to_lable_pure c1) l2) :: bstk)
+        ((LIf b (com_to_label_pure c1) l1) :: nil)
+        ((LIf b (com_to_label_pure c1) l2) :: bstk)
         (loc1 :: nil, glb1) (sstk, glb2)
   | E'_If1 : forall fc b c1 c2 l1 l2 glb1 glb2 bstk1 bstk2 sstk1 sstk2,
       single_point l1 ->
@@ -222,8 +257,8 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (l1 :: bstk1) (l2 :: bstk2)
         (sstk1, glb1) (sstk2, glb2) ->
       ceval' fc (CIf b c1 c2)
-        ((LIf b l1 (com_to_lable_pure c2)) :: bstk1)
-        ((LIf b l2 (com_to_lable_pure c2)) :: bstk2)
+        ((LIf b l1 (com_to_label_pure c2)) :: bstk1)
+        ((LIf b l2 (com_to_label_pure c2)) :: bstk2)
         (sstk1, glb1) (sstk2, glb2)
   | E'_If2 : forall fc b c1 c2 l1 l2 glb1 glb2 bstk1 bstk2 sstk1 sstk2,
       single_point l1 ->
@@ -234,15 +269,15 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (l1 :: bstk1) (l2 :: bstk2)
         (sstk1, glb1) (sstk2, glb2) ->
       ceval' fc (CIf b c1 c2)
-        ((LIf b (com_to_lable_pure c1) l1) :: bstk1)
-        ((LIf b (com_to_lable_pure c1) l2) :: bstk2)
+        ((LIf b (com_to_label_pure c1) l1) :: bstk1)
+        ((LIf b (com_to_label_pure c1) l2) :: bstk2)
         (sstk1, glb1) (sstk2, glb2)
 
   | E'_WhileFalse : forall fc b c loc glb,
       beval (loc, glb) b = false ->
       ceval' fc (CWhile b c)
-        ((LWhile b (com_to_lable_pure c)) :: nil)
-        ((LWhile b (com_to_lable_pure c)) :: nil)
+        ((LWhile b (com_to_label_pure c)) :: nil)
+        ((LWhile b (com_to_label_pure c)) :: nil)
         (loc :: nil, glb) (loc :: nil, glb)
   | E'_WhileTrue1 : forall fc b c l1 l2 loc1 glb1 glb2 bstk sstk,
       is_pure l1 ->
@@ -261,8 +296,8 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
       1 + length bstk = length sstk ->
       beval (loc1, glb1) b = true ->
       ceval' fc c
-        ((com_to_lable_pure c) :: nil)
-        ((com_to_lable_pure c) :: nil)
+        ((com_to_label_pure c) :: nil)
+        ((com_to_label_pure c) :: nil)
         (loc1 :: nil, glb1) st ->
       ceval' fc (CWhile b c)
         (l1 :: nil) (l2 :: bstk)
@@ -287,10 +322,10 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
       1 + length bstk1 = length sstk1 ->
       1 + length bstk2 = length sstk2 ->
       ceval' fc c
-        (l1 :: bstk1) ((com_to_lable_pure c) :: nil)
+        (l1 :: bstk1) ((com_to_label_pure c) :: nil)
         (sstk1, glb1) st ->
       ceval' fc (CWhile b c)
-        ((LWhile b (com_to_lable_pure c)) :: nil) (l2 :: bstk2)
+        ((LWhile b (com_to_label_pure c)) :: nil) (l2 :: bstk2)
         st (sstk2, glb2) ->
       ceval' fc (CWhile b c)
         (l1 :: bstk1) (l2 :: bstk2)
@@ -313,13 +348,22 @@ Proof.
 Qed.
 (** [] *)
 
+Lemma length_nil_app_cons {A : Type} : forall l a,
+  @nil A = l ++ a :: nil -> False.
+Proof.
+  intros.
+  pose proof eq_refl (length (@nil A)).
+  rewrite H in H0 at 1.
+  rewrite app_length in H0.
+  simpl in H0. omega.
+Qed.
 
 (** Bridging basic ceval' to multi_ceval' *)
 Definition restk : Type := list (com * option lbstk * state').
 
 Inductive middle_ceval' : func_context -> list func -> restk -> restk -> Prop :=
-  | ME_r : forall fc lf c bstk st1 st2 stk,
-      ceval' fc c bstk ((com_to_lable_pure c) :: nil) st1 st2 ->
+  | ME_r_pure : forall fc lf c bstk st1 st2 stk,
+      ceval' fc c bstk ((com_to_label_pure c) :: nil) st1 st2 ->
       middle_ceval' fc lf ((c, Some bstk, st1) :: stk) ((c, None, st2) :: stk)
   | ME_r_single : forall fc c l2 bstk1 bstk2 st1 st2 stk lf,
       single_point l2 ->
@@ -334,7 +378,7 @@ Inductive middle_ceval' : func_context -> list func -> restk -> restk -> Prop :=
       middle_ceval' fc lf
         ((c1, Some (l1 :: bstk), (sstk, glb)) :: stk)
         (* Each reentry call clears the calling stack *)
-        ((c2, Some ((com_to_lable_pure c2) :: nil), (loc :: nil, glb))
+        ((c2, Some ((com_to_label_pure c2) :: nil), (loc :: nil, glb))
           :: (c1, Some (l1 :: bstk), (sstk, glb)) :: stk)
   | ME_ex : forall fc c1 c2 l2 glb1 glb2 stk lf bstk loc sstk,
       single_point l2 ->
@@ -347,3 +391,169 @@ Inductive middle_ceval' : func_context -> list func -> restk -> restk -> Prop :=
 
 Definition multi_ceval' (fc : func_context) (lf : public_funcs) : restk -> restk -> Prop := clos_refl_trans (middle_ceval' fc lf).
 (** [] *)
+
+
+Lemma middle_ceval'_seq_head_some:
+  forall fc lf c1 c2 l1 l2 st1 st2 stk1 stk2 bstk,
+  single_point l1 ->
+  middle_ceval' fc lf
+    (stk1 ++ (c2, Some (l1 :: bstk), st1) :: nil)
+    (stk2 ++ (c2, Some (l2 :: bstk), st2) :: nil) ->
+  middle_ceval' fc lf
+    (stk1 ++ (CSeq c1 c2, Some ((LSeq (com_to_label_pure c1) l1) :: bstk), st1) :: nil)
+    (stk2 ++ (CSeq c1 c2, Some ((LSeq (com_to_label_pure c1) l2) :: bstk), st2) :: nil).
+Proof.
+  intros.
+  destruct stk1, stk2; simpl in *.
+  - inversion H0; subst.
+    destruct st1, st2.
+    pose proof ceval'_depth_valid _ _ _ _ _ _ _ _ H11 as [? ?].
+    apply ME_r_single.
+    + apply SP_Seq2, H5.
+      apply com_to_label_pure_is_pure.
+    + eapply E'_Seq2; try assumption.
+      right. exact H5.
+  - inversion H0; subst.
+    + pose proof length_nil_app_cons _ _ H9. inversion H1.
+    + pose proof length_nil_app_cons _ _ H9. inversion H1.
+    + destruct stk2; simpl in *; inversion H10; subst.
+      * eapply ME_re.
+        exact H7. auto.
+        apply SP_Seq2, H12.
+        apply com_to_label_pure_is_pure.
+        exact H13.
+      * pose proof length_nil_app_cons _ _ H3. inversion H1.
+  - inversion H0; subst.
+    + apply eq_sym in H10.
+      pose proof length_nil_app_cons _ _ H10. inversion H1.
+    + destruct stk1; simpl in *; inversion H2; subst.
+      * eapply ME_ex.
+        apply SP_Seq2, H6.
+        apply com_to_label_pure_is_pure.
+        exact H11.
+      * pose proof length_nil_app_cons _ _ H4. inversion H1.
+  - inversion H0; subst.
+    + apply app_inj_tail in H7 as [? ?].
+      inversion H2; subst.
+      apply ME_r_pure; assumption.
+    + apply app_inj_tail in H7 as [? ?].
+      inversion H2; subst.
+      apply ME_r_single; assumption.
+    + rewrite app_comm_cons in H4.
+      apply app_inj_tail in H4 as [? ?].
+      inversion H2; subst.
+      eapply ME_re; try assumption.
+      exact H7. auto.
+    + rewrite app_comm_cons in H2.
+      apply app_inj_tail in H2 as [? ?].
+      inversion H2; subst.
+      apply ME_ex; try assumption.
+Qed.
+
+Lemma multi_ceval'_seq_head:
+  forall l2 fc lf c2 st4 st3 c1 bstk,
+  single_point l2 ->
+  clos_refl_trans (middle_ceval' fc lf)
+      ((c2, Some (l2 :: bstk), st4) :: nil)
+      ((c2, None, st3) :: nil) ->
+  clos_refl_trans (middle_ceval' fc lf)
+      ((CSeq c1 c2, Some ((LSeq (com_to_label_pure c1) l2) :: bstk), st4) :: nil)
+      ((CSeq c1 c2, None, st3) :: nil).
+Proof.
+  intros.
+  set (stk := @nil (com * option lbstk * state')).
+  unfold stk.
+  change ((c2, Some (l2 :: bstk), st4) :: nil) with (stk ++ (c2, Some (l2 :: bstk), st4) :: nil) in H0.
+  change ((CSeq c1 c2, Some ((LSeq (com_to_label_pure c1) l2) :: bstk), st4) :: nil) with (stk ++ (CSeq c1 c2, Some ((LSeq (com_to_label_pure c1) l2) :: bstk), st4) :: nil).
+  clearbody stk.
+  remember (stk ++ (c2, Some (l2 :: bstk), st4) :: nil) as l.
+  remember ((c2, None, st3) :: nil) as l'.
+  apply Operators_Properties.clos_rt_rt1n in H0.
+  revert Heql.
+  revert stk st4.
+  revert c1.
+  generalize dependent l2.
+  induction H0; intros; subst.
+  - destruct stk; inversion Heql; subst.
+    pose proof length_nil_app_cons _ _ H2. inversion H0.
+  - specialize (IHclos_refl_trans_1n eq_refl).
+    inversion H; subst.
+    + destruct stk.
+      * inversion H2; subst.
+        inversion H0; subst.
+        {
+          apply rt_step, ME_r_pure. simpl.
+          destruct st3, st4.
+          pose proof ceval'_depth_valid _ _ _ _ _ _ _ _ H5 as [? ?].
+          eapply E'_Seq2; try assumption.
+          apply com_to_label_pure_valid.
+        }
+        {
+          inversion H3.
+        }
+      * simpl in H2.
+        inversion H2; subst; clear H2.
+        simpl.
+        pose proof IHclos_refl_trans_1n l2 H1 c1 ((c, None, st2) :: stk) st4 eq_refl.
+        rewrite app_comm_cons in H.
+        eapply middle_ceval'_seq_head_some, rt_step in H.
+        simpl in *.
+        eapply rt_trans.
+        exact H. exact H2. exact H1.
+    +
+Admitted.
+
+(** Denotational Sematics Relation *)
+Theorem ceval_multi_ceval' : forall fc lf c loc1 loc2 glb1 glb2,
+    ceval fc lf c (loc1, glb1) (loc2, glb2) ->
+    multi_ceval' fc lf
+      ((c, Some ((com_to_label_pure c) :: nil), ((loc1 :: nil), glb1)) :: nil)
+      ((c, None, ((loc2 :: nil), glb2)) :: nil)
+  with arbitrary_eval_multi_ceval' : forall fc lf loc glb1 glb2 bstk sstk,
+    arbitrary_eval fc lf loc glb1 glb2 ->
+    forall lb c,
+    single_point lb ->
+    length bstk = length sstk ->
+    multi_ceval' fc lf
+      ((c, Some (lb :: bstk), (loc :: sstk, glb1)) :: nil)
+      ((c, Some (lb :: bstk), (loc :: sstk, glb2)) :: nil).
+Proof.
+{
+  intros.
+  clear ceval_multi_ceval'.
+  remember (loc1, glb1) as st1.
+  remember (loc2, glb2) as st2.
+  revert dependent loc1.
+  revert dependent loc2.
+  revert dependent glb1.
+  revert dependent glb2.
+  induction H; intros.
+  - subst. inversion Heqst1; subst.
+    simpl.
+    apply rt_step, ME_r_pure.
+    simpl. apply E'_Skip.
+  - subst st. simpl.
+    apply rt_step, ME_r_pure.
+    simpl. eapply E'_Ass.
+    apply H.
+    apply Heqst2.
+  - destruct st2 as (loc3, glb3); subst.
+    specialize (IHceval1 glb3 glb1 loc3 eq_refl loc1 eq_refl).
+    specialize (IHceval2 glb2 glb3 loc2 eq_refl loc3 eq_refl).
+    admit.  (* Seq *)
+  - admit.  (* If Branch *)
+  - admit.  (* Else Branch *)
+  - admit.  (* Loop Exit *)
+  - admit.  (* Loop Execute *)
+  - admit.  (* Call *)
+  - admit.  (* Reentry *)
+}
+{
+  intros.
+  clear arbitrary_eval_multi_ceval'.
+  induction H; subst.
+  - admit.
+  - admit.
+}
+Admitted.
+
