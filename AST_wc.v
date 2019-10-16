@@ -32,6 +32,17 @@ Inductive com : Type :=
   | CWhile (b : bexp) (c : com)
   | CCall (f : func) (prms : list aexp)
   | CReentry.
+
+Notation "'Skip'" := CSkip.
+Notation "c1 ;; c2" :=
+  (CSeq c1 c2) (at level 80, right associativity).
+Notation "'While' b 'Do' c 'EndWhile'" :=
+  (CWhile b c) (at level 80, right associativity).
+Notation "'If' b 'Then' c2 'Else' c3 'EndIf'" :=
+  (CIf b c2 c3) (at level 10, right associativity).
+Notation "f [( x )]" :=
+  (CCall f x) (at level 5, no associativity).
+Notation "'Re'" := CReentry.
 (** [] *)
 
 (** State Model *)
