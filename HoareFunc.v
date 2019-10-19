@@ -2,63 +2,7 @@ Require Import Coq.Lists.List.
 Require Import AST_wc.
 Require Import Hoare_wc.
 
-Definition func_predicate : Type := func -> list (Assertion * Assertion).
-
-Module Simple.
-
-Definition triple_valid (fc : func_context) (lf : public_funcs) (P : Assertion) (c : com) (Q : Assertion) : Prop :=
-  forall st1 st2,
-    P st1 ->
-    ceval fc lf c st1 st2 ->
-    Q st2.
-
-Definition fp_valid (fc : func_context) (lf : public_funcs) (fp : func_predicate) : Prop :=
-  forall f P Q,
-    In (P, Q) (fp f) ->
-    triple_valid fc lf P (func_bdy f) Q.
-
-Definition hoare_triple (fc : func_context) (lf : public_funcs) (fp : func_predicate) (P : Assertion) (c : com) (Q : Assertion) : Type :=
-  fp_valid fc lf fp ->
-  triple_valid fc lf P c Q.
-
-Theorem hoare_call : forall fc lf fp f pv P Q,
-  In (P, Q) (fp f) ->
-  hoare_triple fc lf fp P (CCall f pv) Q.
-Proof.
-  unfold hoare_triple, fp_valid.
-  intros.
-Admitted.
-
-Theorem hoare_reentry :
-  forall P I,
-    localp P ->
-    globalp I ->
-  forall fc lf fp,
-    (forall f, In f lf ->
-      In (I, I) (fp f)) ->
-  hoare_triple fc lf fp (P AND I) CReentry (P AND I).
-Proof.
-  unfold hoare_triple, fp_valid, triple_valid.
-  unfold andp.
-  intros P I Hloc Hglb.
-  intros.
-  destruct H1.
-  inversion H2; subst.
-  split.
-  - eapply Hloc.
-    apply H1.
-  - clear H1 H2.
-    induction H4; [exact H3 |].
-    specialize (IHarbitrary_eval H H0).
-    pose proof H0 f I I (H _ H1) _ _ (Hglb _ _ _ H3) H2.
-    apply IHarbitrary_eval.
-    eapply Hglb.
-    exact H5.
-Qed.
-
-End Simple.
-
-Module Axiomatic.
+Require Import Omega.
 
 (* ceval' sigma c st1 st2
 
@@ -69,18 +13,341 @@ S n => ceval' (sg n)
 sigma
 exists n, sg n
 
-ceval' sigma <-> ceval
+ceval' sigma <-> ceval *)
 
-Delta P f Q -> Delta |-- P f Q -> Delta |-- P c Q -> |== P c Q *)
+Inductive ceval' (sigma : func_context -> public_funcs -> com -> state -> state -> Prop) (fc : func_context) (lf : public_funcs) : com -> state -> state -> Prop :=
+  | E'_Skip : forall st,
+      ceval' sigma fc lf CSkip st st
+  | E'_Ass : forall st X a n,
+      aeval st a = n ->
+      ceval' sigma fc lf (CAss X a) st (update_state st X n)
+  | E'_Seq : forall c1 c2 st1 st2 st3,
+      ceval' sigma fc lf c1 st1 st2 ->
+      ceval' sigma fc lf c2 st2 st3 ->
+      ceval' sigma fc lf (CSeq c1 c2) st1 st3
+  | E'_IfTrue : forall b c1 c2 st1 st2,
+      beval st1 b = true ->
+      ceval' sigma fc lf c1 st1 st2 ->
+      ceval' sigma fc lf (CIf b c1 c2) st1 st2
+  | E'_IfFalse : forall b c1 c2 st1 st2,
+      beval st1 b = false ->
+      ceval' sigma fc lf c2 st1 st2 ->
+      ceval' sigma fc lf (CIf b c1 c2) st1 st2
+  | E'_WhileFalse : forall b c st,
+      beval st b = false ->
+      ceval' sigma fc lf (CWhile b c) st st
+  | E'_WhileTrue : forall b c st1 st2 st3,
+      beval st1 b = true ->
+      ceval' sigma fc lf c st1 st2 ->
+      ceval' sigma fc lf (CWhile b c) st2 st3 ->
+      ceval' sigma fc lf (CWhile b c) st1 st3
+  | E'_Call : forall f pv loc1 glb1 glb2,
+      (exists loc2,
+        sigma fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2)) ->
+      ceval' sigma fc lf (CCall f pv) (loc1, glb1) (loc1, glb2)
+  | E'_Reentry : forall loc glb1 glb2,
+      arbitrary_eval' sigma fc lf loc glb1 glb2 ->
+      ceval' sigma fc lf CReentry (loc, glb1) (loc, glb2)
+with arbitrary_eval' (sigma: func_context -> public_funcs -> com -> state -> state -> Prop) (fc: func_context) (lf: public_funcs): unit_state -> unit_state -> unit_state -> Prop :=
+  | ArE'_nil: forall loc gl, arbitrary_eval' sigma fc lf loc gl gl
+  | ArE'_cons: forall loc loc1 loc2 gl1 gl2 gl3 f,
+                In f lf ->
+                sigma fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) ->
+                arbitrary_eval' sigma fc lf loc gl2 gl3 ->
+                arbitrary_eval' sigma fc lf loc gl1 gl3.
+
+Fixpoint sg (n : nat) : func_context -> public_funcs -> com -> state -> state -> Prop :=
+  match n with
+  | 0 => fun _ _ _ _ _ => False
+  | S n => ceval' (sg n)
+  end.
+
+Lemma sg_mono_inc : forall fc lf c st1 st2 n m,
+  sg n fc lf c st1 st2 -> sg (n + m) fc lf c st1 st2.
+Proof.
+  intros.
+  revert H.
+  revert c st1 st2 m.
+  induction n; intros; [inversion H |].
+  simpl in *.
+  induction H.
+  - constructor.
+  - constructor.
+    auto.
+  - eapply E'_Seq.
+    + apply IHceval'1.
+    + apply IHceval'2.
+  - apply E'_IfTrue; auto.
+  - apply E'_IfFalse; auto.
+  - apply E'_WhileFalse; auto.
+  - eapply E'_WhileTrue; auto.
+    + apply IHceval'1.
+    + apply IHceval'2.
+  - destruct H as [loc2 ?].
+    apply E'_Call.
+    exists loc2.
+    apply IHn.
+    apply H.
+  - apply E'_Reentry.
+    induction H.
+    + apply ArE'_nil.
+    + eapply ArE'_cons.
+      * apply H.
+      * apply IHn. apply H0.
+      * apply IHarbitrary_eval'.
+Qed.
+
+Lemma arbitrary_eval'_mono_inc : forall fc lf loc gl1 gl2 n1 n2,
+  arbitrary_eval' (sg n1) fc lf loc gl1 gl2 ->
+  arbitrary_eval' (sg (n1 + n2)) fc lf loc gl1 gl2.
+Proof.
+  intros.
+  revert H.
+  revert loc gl1 gl2 n2.
+  induction n1; intros.
+  - inversion H.
+    + apply ArE'_nil.
+    + simpl.
+      induction H2.
+      * inversion H1.
+      * apply IHarbitrary_eval'; auto.
+  - induction H.
+   + apply ArE'_nil.
+   + eapply ArE'_cons.
+    * apply H.
+    * apply sg_mono_inc.
+      apply H0.
+    * apply IHarbitrary_eval'.
+Qed.
+
+Definition sigma (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) : Prop :=
+  exists n, sg n fc lf c st1 st2.
+
+Lemma sigma_ceval'_equiv fc lf c st1 st2:
+  sigma fc lf c st1 st2 <-> ceval' sigma fc lf c st1 st2.
+Proof.
+  split; intros.
+  {
+    destruct H as [n ?].
+    destruct n; [inversion H |].
+    simpl in H.
+    induction H; subst.
+    - apply E'_Skip.
+    - apply E'_Ass.
+      auto.
+    - eapply E'_Seq.
+      + apply IHceval'1.
+      + apply IHceval'2.
+    - apply E'_IfTrue; auto.
+    - apply E'_IfFalse; auto.
+    - apply E'_WhileFalse; auto.
+    - eapply E'_WhileTrue.
+      + apply H.
+      + apply IHceval'1.
+      + apply IHceval'2.
+    - destruct H as [loc2 ?].
+      apply E'_Call.
+      exists loc2, n.
+      apply H.
+    - apply E'_Reentry.
+      induction H.
+      + apply ArE'_nil.
+      + eapply ArE'_cons.
+        * apply H.
+        * exists n.
+          apply H0.
+        * auto.
+  }
+  {
+    induction H.
+    - exists 1; simpl.
+      apply E'_Skip.
+    - exists 1; simpl.
+      apply E'_Ass.
+      auto.
+    - destruct IHceval'1 as [n1 ?].
+      destruct IHceval'2 as [n2 ?].
+      exists (S n1 + n2).
+      simpl.
+      eapply E'_Seq.
+      + pose proof sg_mono_inc _ _ _ _ _ _ (S n2) H1.
+        replace (n1 + S n2) with (S n1 + n2) in H3; [| omega].
+        apply H3.
+      + pose proof sg_mono_inc _ _ _ _ _ _ (S n1) H2.
+        replace (n2 + S n1) with (S n1 + n2) in H3; [| omega].
+        apply H3.
+    - destruct IHceval' as [n ?].
+      exists (S n).
+      simpl.
+      apply E'_IfTrue; auto.
+      replace (ceval' (sg n)) with (sg (S n)); auto.
+      replace (S n) with (n + 1); try omega.
+      eapply sg_mono_inc in H1.
+      apply H1.
+    - destruct IHceval' as [n ?].
+      exists (S n).
+      simpl.
+      apply E'_IfFalse; auto.
+      replace (ceval' (sg n)) with (sg (S n)); auto.
+      replace (S n) with (n + 1); try omega.
+      eapply sg_mono_inc in H1.
+      apply H1.
+    - exists 1; simpl.
+      apply E'_WhileFalse; auto.
+    - destruct IHceval'1 as [n1 ?].
+      destruct IHceval'2 as [n2 ?].
+      exists (S n1 + n2).
+      simpl.
+      eapply E'_WhileTrue; auto.
+      + pose proof sg_mono_inc _ _ _ _ _ _ (S n2) H2.
+        replace (n1 + S n2) with (S n1 + n2) in H4; [| omega].
+        apply H4.
+      + pose proof sg_mono_inc _ _ _ _ _ _ (S n1) H3.
+        replace (n2 + S n1) with (S n1 + n2) in H4; [| omega].
+        apply H4.
+    - destruct H as [loc2 [n ?]].
+      exists (S n).
+      simpl.
+      apply E'_Call.
+      exists loc2. auto.
+    - induction H.
+      + exists 1; simpl.
+        apply E'_Reentry.
+        apply ArE'_nil.
+      + destruct H0 as [n1 ?].
+        destruct IHarbitrary_eval' as [n2 ?].
+        apply (sg_mono_inc _ _ _ _ _ _ 1) in H2.
+        replace (n2 + 1) with (S n2) in H2; [| omega].
+        simpl in H2.
+        inversion H2; subst.
+        exists (S n1 + n2); simpl.
+        apply E'_Reentry.
+        eapply ArE'_cons.
+        * apply H.
+        * apply sg_mono_inc.
+          apply H0.
+        * rewrite Nat.add_comm.
+          apply arbitrary_eval'_mono_inc.
+          apply H6.
+  }
+Qed.
+
+Lemma sg_n_ceval_equiv n fc lf: forall c st1 st2,
+  sg n fc lf c st1 st2 -> ceval fc lf c st1 st2.
+Proof.
+  induction n; intros.
+  + simpl in H.
+    inversion H.
+  + simpl in H.
+    induction H; subst.
+    * apply E_Skip.
+    * apply E_Ass; auto.
+    * apply E_Seq with st2; auto.
+    * apply E_IfTrue; auto.
+    * apply E_IfFalse; auto.
+    * apply E_WhileFalse; auto.
+    * apply E_WhileTrue with st2; auto.
+    * apply E_Call.
+      destruct H as [loc3 ?].
+      exists loc3.
+      apply IHn.
+      apply H.
+    * apply E_Reentry.
+      induction H.
+      - apply ArE_nil.
+      - eapply ArE_cons.
+        ++ apply H.
+        ++ apply IHn. apply H0.
+        ++ apply IHarbitrary_eval'.
+Qed.
+
+Lemma ceval_sg_n_equiv fc lf: forall c st1 st2,
+  ceval fc lf c st1 st2 ->
+  exists n, sg n fc lf c st1 st2.
+Proof.
+  intros.
+  induction H.
+  - exists 1; simpl.
+    apply E'_Skip.
+  - exists 1; simpl.
+    apply E'_Ass; auto.
+  - destruct IHceval1 as [n1 ?].
+    destruct IHceval2 as [n2 ?].
+    admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+Admitted.
+
+Lemma ceval'_ceval_equiv (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
+  ceval' sigma fc lf c st1 st2 <-> ceval fc lf c st1 st2
+with abeval'_abeval_equiv (fc: func_context) (lf: public_funcs) (loc glb1 glb2: unit_state) :
+  arbitrary_eval' sigma fc lf loc glb1 glb2 <-> arbitrary_eval fc lf loc glb1 glb2.
+Proof.
+  {
+    clear ceval'_ceval_equiv.
+    split; intros.
+    {
+      induction H.
+      - apply E_Skip.
+      - apply E_Ass; auto.
+      - apply E_Seq with st2; auto.
+      - apply E_IfTrue; auto.
+      - apply E_IfFalse; auto.
+      - apply E_WhileFalse; auto.
+      - apply E_WhileTrue with st2; auto.
+      - apply E_Call.
+        destruct H as [loc2 ?].
+        destruct H as [n ?].
+        exists loc2.
+        apply sg_n_ceval_equiv in H.
+        auto.
+      - apply E_Reentry.
+        induction H.
+        + apply ArE_nil.
+        + eapply ArE_cons.
+          * apply H.
+          * destruct H0 as [n H0].
+            apply sg_n_ceval_equiv in H0.
+            apply H0.
+          * apply IHarbitrary_eval'.
+    }
+    {
+      Print ceval.
+      induction H.
+      - apply E'_Skip.
+      - apply E'_Ass; auto.
+      - apply E'_Seq with st2; auto.
+      - apply E'_IfTrue; auto.
+      - apply E'_IfFalse; auto.
+      - apply E'_WhileFalse; auto.
+      - apply E'_WhileTrue with st2; auto.
+      - apply E'_Call.
+        destruct H as [loc2 ?].
+        exists loc2.
+        unfold sigma.
+        admit.
+      - admit.
+    }
+  }
+  {
+    clear abeval'_abeval_equiv.
+    admit.
+  }
+Admitted.
+
+
+Definition func_predicate : Type := func -> Assertion -> Assertion -> Prop.
 
 Definition assn_sub (P : Assertion) (X : var) (a : aexp) : Assertion :=
   fun st => P (update_state st X (aeval st a)).
-
 Notation "P [ X |-> a ]" := (assn_sub P X a) (at level 10, X at next level).
 
 Inductive hoare_triple : Type :=
   | Build_hoare_triple (P : Assertion) (c : com) (Q : Assertion).
-
 Notation "{{ P }}  c  {{ Q }}" :=
   (Build_hoare_triple P c Q) (at level 90, c at next level).
 
@@ -89,14 +356,13 @@ Inductive provable (fc : func_context) (lf : public_funcs) (fp : func_predicate)
   | hoare_reentry : forall P I,
       localp P ->
       globalp I ->
-      (forall f, In f lf ->
-        In (I, I) (fp f)) ->
+      (forall f, In f lf -> fp f I I) ->
       provable fc lf fp ({{P AND I}} CReentry {{P AND I}})
   (* function predicate call *)
   | hoare_call : forall f pv P Q R,
       globalp Q ->
       localp R ->
-      In (P, Q) (fp f) ->
+      fp f P Q ->
       provable fc lf fp ({{(pv_to_assertion fc f pv P) AND R}} CCall f pv {{Q AND R}})
   (* traditional ones *)
   | hoare_skip : forall (P : Assertion),
@@ -119,7 +385,6 @@ Inductive provable (fc : func_context) (lf : public_funcs) (fp : func_predicate)
       provable fc lf fp ({{P'}} c {{Q'}}) ->
       Q' |-- Q ->
       provable fc lf fp ({{P}} c {{Q}}).
-
 Notation "fc lf fp |--  tr" := (provable fc lf fp tr) (at level 91, no associativity).
 
 Definition triple_valid (fc : func_context) (lf : public_funcs) (tr : hoare_triple) : Prop :=
@@ -127,9 +392,53 @@ Definition triple_valid (fc : func_context) (lf : public_funcs) (tr : hoare_trip
   | {{P}} c {{Q}} =>
     forall st1 st2, P st1 -> ceval fc lf c st1 st2 -> Q st2
   end.
-
 Notation "fc lf |== tr" := (triple_valid fc lf tr) (at level 91, no associativity).
 
+Definition fp_valid (fc : func_context) (lf : public_funcs) (fp : func_predicate) : Prop :=
+  forall f P Q st1 st2,
+    fp f P Q -> P st1 -> sigma fc lf (func_bdy f) st1 st2 -> Q st2.
+Notation "fc lf ||== fp" := (fp_valid fc lf fp) (at level 91, no associativity).
+
+Definition weak_valid (fc : func_context) (lf : public_funcs) (fp : func_predicate) (tr : hoare_triple) : Prop :=
+  fp_valid fc lf fp ->
+  triple_valid fc lf tr.
+Notation "fc lf fp |== tr" := (weak_valid fc lf fp tr) (at level 91, no associativity).
+
+Theorem hoare_sound_weak : forall fc lf fp tr,
+  provable fc lf fp tr ->
+  weak_valid fc lf fp tr.
+Proof.
+Admitted.
+
+(* (Delta P f Q -> Delta |-- P f Q) -> Delta |-- P c Q -> |== P c Q *)
+Theorem hoare_sound: forall fc lf (fp : func_predicate),
+  (forall f P Q, fp f P Q ->
+      provable fc lf fp ({{P}} (func_bdy f) {{Q}})) ->
+  forall tr, provable fc lf fp tr ->
+      triple_valid fc lf tr.
+Proof.
+  unfold triple_valid.
+  intros.
+  induction H0; intros.
+  - admit.
+  - inversion H4; subst.
+    destruct H11 as [loc2 ?].
+    unfold andp, pv_to_assertion in *.
+    destruct H3.
+    split.
+    + 
+      admit.
+    + eapply H1.
+      exact H6.
+Admitted.
+
+Theorem hoare_complete: forall fc lf tr,
+  triple_valid fc lf tr ->
+  exists fp, provable fc lf fp tr.
+Proof.
+Admitted.
+
+(*
 Definition fp_valid (fc : func_context) (lf : public_funcs) (fp : func_predicate) : Prop :=
   forall f P Q,
     In (P, Q) (fp f) ->
@@ -258,7 +567,7 @@ Admitted.
 
 End Axiomatic.
 
-
+*)
 
 
 
