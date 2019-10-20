@@ -41,9 +41,8 @@ Inductive ceval' (sigma : func_context -> public_funcs -> com -> state -> state 
       ceval' sigma fc lf c st1 st2 ->
       ceval' sigma fc lf (CWhile b c) st2 st3 ->
       ceval' sigma fc lf (CWhile b c) st1 st3
-  | E'_Call : forall f pv loc1 glb1 glb2,
-      (exists loc2,
-        sigma fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2)) ->
+  | E'_Call : forall f pv loc1 loc2 glb1 glb2,
+      sigma fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2) ->
       ceval' sigma fc lf (CCall f pv) (loc1, glb1) (loc1, glb2)
   | E'_Reentry : forall loc glb1 glb2,
       arbitrary_eval' sigma fc lf loc glb1 glb2 ->
@@ -83,9 +82,7 @@ Proof.
   - eapply E'_WhileTrue; auto.
     + apply IHceval'1.
     + apply IHceval'2.
-  - destruct H as [loc2 ?].
-    apply E'_Call.
-    exists loc2.
+  - eapply E'_Call.
     apply IHn.
     apply H.
   - apply E'_Reentry.
@@ -145,9 +142,8 @@ Proof.
       + apply H.
       + apply IHceval'1.
       + apply IHceval'2.
-    - destruct H as [loc2 ?].
-      apply E'_Call.
-      exists loc2, n.
+    - eapply E'_Call.
+      exists n.
       apply H.
     - apply E'_Reentry.
       induction H.
@@ -205,11 +201,11 @@ Proof.
       + pose proof sg_mono_inc _ _ _ _ _ _ (S n1) H3.
         replace (n2 + S n1) with (S n1 + n2) in H4; [| omega].
         apply H4.
-    - destruct H as [loc2 [n ?]].
+    - destruct H as [n ?].
       exists (S n).
       simpl.
-      apply E'_Call.
-      exists loc2. auto.
+      eapply E'_Call.
+      apply H.
     - induction H.
       + exists 1; simpl.
         apply E'_Reentry.
@@ -247,9 +243,7 @@ Proof.
     * apply E_IfFalse; auto.
     * apply E_WhileFalse; auto.
     * apply E_WhileTrue with st2; auto.
-    * apply E_Call.
-      destruct H as [loc3 ?].
-      exists loc3.
+    * eapply E_Call.
       apply IHn.
       apply H.
     * apply E_Reentry.
@@ -279,7 +273,61 @@ Proof.
   - admit.
   - admit.
   - admit.
-  - admit.
+  - induction H.
+    + exists 1; simpl.
+      apply E'_Reentry.
+      apply ArE'_nil.
+    + destruct IHarbitrary_eval as [n ?].
+      admit.
+Admitted.
+
+Fact pass' : False. Admitted.
+Ltac pass := pose proof pass' as Htest; inversion Htest.
+
+(* One way does not work *)
+Lemma ceval'_ceval (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
+  ceval' sigma fc lf c st1 st2 -> ceval fc lf c st1 st2
+with abeval'_abeval (fc: func_context) (lf: public_funcs) (loc glb1 glb2: unit_state) :
+  arbitrary_eval' sigma fc lf loc glb1 glb2 -> arbitrary_eval fc lf loc glb1 glb2.
+Proof.
+(* This branch is save now. *)
+{
+  clear ceval'_ceval.
+  intros.
+  induction H.
+  - apply E_Skip.
+  - apply E_Ass; auto.
+  - apply E_Seq with st2; auto.
+  - apply E_IfTrue; auto.
+  - apply E_IfFalse; auto.
+  - apply E_WhileFalse; auto.
+  - apply E_WhileTrue with st2; auto.
+  - destruct H as [n ?].
+    eapply E_Call.
+    apply sg_n_ceval_equiv in H.
+    apply H.
+  - apply E_Reentry.
+    induction H.
+    + apply ArE_nil.
+    + destruct H0.
+      apply sg_n_ceval_equiv in H0.
+      eapply ArE_cons.
+      apply H.
+      apply H0.
+      apply IHarbitrary_eval'.
+}
+(* This branch has trouble. *)
+{
+  clear abeval'_abeval.
+  intros.
+  induction H.
+  + apply ArE_nil.
+  + (* Possibly the follwing line causes the trouble *)
+    apply sigma_ceval'_equiv in H0.
+    apply ceval'_ceval in H0.
+    pose proof ArE_cons _ _ _ _ _ _ _ _ _ H H0 IHarbitrary_eval'.
+    apply H2.
+}
 Admitted.
 
 Lemma ceval'_ceval_equiv (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
@@ -299,24 +347,25 @@ Proof.
       - apply E_IfFalse; auto.
       - apply E_WhileFalse; auto.
       - apply E_WhileTrue with st2; auto.
-      - apply E_Call.
-        destruct H as [loc2 ?].
-        destruct H as [n ?].
-        exists loc2.
+      - destruct H as [n ?].
+        eapply E_Call.
         apply sg_n_ceval_equiv in H.
-        auto.
+        apply H.
       - apply E_Reentry.
         induction H.
         + apply ArE_nil.
-        + eapply ArE_cons.
-          * apply H.
-          * destruct H0 as [n H0].
-            apply sg_n_ceval_equiv in H0.
-            apply H0.
-          * apply IHarbitrary_eval'.
+        + destruct H0.
+          apply sg_n_ceval_equiv in H0.
+          eapply ArE_cons.
+          apply H.
+          apply H0.
+          apply IHarbitrary_eval'.
+(*         pass. *)
+        (* apply E_Reentry.
+        apply abeval'_abeval_equiv.
+        apply H. *)
     }
     {
-      Print ceval.
       induction H.
       - apply E'_Skip.
       - apply E'_Ass; auto.
@@ -325,19 +374,40 @@ Proof.
       - apply E'_IfFalse; auto.
       - apply E'_WhileFalse; auto.
       - apply E'_WhileTrue with st2; auto.
-      - apply E'_Call.
-        destruct H as [loc2 ?].
-        exists loc2.
-        unfold sigma.
-        admit.
-      - admit.
+      - pass.
+        (* eapply E'_Call.
+        rewrite sigma_ceval'_equiv.
+        apply IHceval. *)
+      - pass.
+        (* apply E'_Reentry.
+        rewrite abeval'_abeval_equiv.
+        auto. *)
     }
   }
   {
     clear abeval'_abeval_equiv.
-    admit.
+    split; intros.
+    {
+      induction H.
+      + apply ArE_nil.
+      + pass.
+        (* apply sigma_ceval'_equiv in H0.
+        apply ceval'_ceval_equiv in H0.
+        pose proof ArE_cons _ _ _ _ _ _ _ _ _ H H0 IHarbitrary_eval'.
+        apply H2. *)
+    }
+    {
+      induction H.
+      + apply ArE'_nil.
+      + pass.
+        (* rewrite <- ceval'_ceval_equiv, <- sigma_ceval'_equiv in H0.
+        eapply ArE'_cons.
+        * apply H.
+        * apply H0.
+        * apply IHarbitrary_eval. *)
+    }
   }
-Admitted.
+Qed.
 
 
 Definition func_predicate : Type := func -> Assertion -> Assertion -> Prop.
@@ -408,6 +478,8 @@ Theorem hoare_sound_weak : forall fc lf fp tr,
   provable fc lf fp tr ->
   weak_valid fc lf fp tr.
 Proof.
+  intros.
+  induction H; unfold weak_valid, fp_valid, triple_valid; intros.
 Admitted.
 
 (* (Delta P f Q -> Delta |-- P f Q) -> Delta |-- P c Q -> |== P c Q *)
@@ -417,25 +489,28 @@ Theorem hoare_sound: forall fc lf (fp : func_predicate),
   forall tr, provable fc lf fp tr ->
       triple_valid fc lf tr.
 Proof.
-  unfold triple_valid.
   intros.
-  induction H0; intros.
-  - admit.
-  - inversion H4; subst.
-    destruct H11 as [loc2 ?].
-    unfold andp, pv_to_assertion in *.
-    destruct H3.
-    split.
-    + 
-      admit.
-    + eapply H1.
-      exact H6.
+  pose proof hoare_sound_weak _ _ _ _ H0.
 Admitted.
 
 Theorem hoare_complete: forall fc lf tr,
   triple_valid fc lf tr ->
   exists fp, provable fc lf fp tr.
 Proof.
+  intros.
+  destruct tr.
+  induction c.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - (* how to construct fp *)
+    exists (fun f I I => provable).
+    
+    
+    remember ((fun st => exists st0, P st0 /\ reentry_semantic fc lf st0 st):Assertion) as I.
 Admitted.
 
 (*

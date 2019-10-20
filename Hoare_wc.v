@@ -63,8 +63,7 @@ Proof.
   {
     intros.
     inversion H0; subst.
-    destruct H8 as [loc2 ?].
-    pose proof H _ _ H2.
+    pose proof H _ _ H8.
     unfold pv_to_assertion in *.
     simpl in *.
 Admitted.

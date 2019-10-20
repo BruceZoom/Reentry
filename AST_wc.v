@@ -138,9 +138,8 @@ Inductive ceval : func_context -> public_funcs -> com -> state -> state -> Prop 
       ceval fc lf c st1 st2 ->
       ceval fc lf (CWhile b c) st2 st3 ->
       ceval fc lf (CWhile b c) st1 st3
-  | E_Call : forall fc lf f pv loc1 glb1 glb2,
-      (exists loc2,
-        ceval fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2)) ->
+  | E_Call : forall fc lf f pv loc1 loc2 glb1 glb2,
+      ceval fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2) ->
       ceval fc lf (CCall f pv) (loc1, glb1) (loc1, glb2)
   | E_Reentry : forall fc lf loc glb1 glb2,
       arbitrary_eval fc lf loc glb1 glb2 ->
@@ -159,38 +158,6 @@ with arbitrary_eval: forall (fc: func_context) (lf: public_funcs) (loc : unit_st
                 arbitrary_eval fc lf loc gl2 gl3 ->
                 arbitrary_eval fc lf loc gl1 gl3. *)
 (** [] *)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
