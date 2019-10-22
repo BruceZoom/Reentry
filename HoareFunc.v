@@ -59,9 +59,11 @@ Inductive ceval' (sigma : semantic) (fc : func_context) (lf : public_funcs) : co
       ceval' sigma fc lf CReentry (loc, glb1) (loc, glb2)
 with arbitrary_eval' (sigma: semantic) (fc: func_context) (lf: public_funcs): unit_state -> unit_state -> unit_state -> Prop :=
   | ArE'_nil: forall loc gl, arbitrary_eval' sigma fc lf loc gl gl
-  | ArE'_cons: forall loc loc1 loc2 gl1 gl2 gl3 f,
+(*   | ArE'_cons: forall loc loc1 loc2 gl1 gl2 gl3 f, *)
+  | ArE'_cons: forall loc pv gl1 gl2 gl3 f,
       In f lf ->
-      sigma fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) ->
+(*       sigma fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) -> *)
+      ceval' sigma fc lf (CCall f pv) (loc, gl1) (loc, gl2) ->
       arbitrary_eval' sigma fc lf loc gl2 gl3 ->
       arbitrary_eval' sigma fc lf loc gl1 gl3.
 
@@ -102,7 +104,10 @@ Proof.
     + apply ArE'_nil.
     + eapply ArE'_cons.
       * apply H.
-      * apply IHn. apply H0.
+      * inversion H0; subst.
+        eapply E'_Call.
+        apply IHn.
+        apply H3.
       * apply IHarbitrary_eval'.
 Qed.
 
@@ -114,18 +119,18 @@ Proof.
   revert H.
   revert loc gl1 gl2 n2.
   induction n1; intros.
-  - inversion H.
+  - inversion H; subst.
     + apply ArE'_nil.
-    + simpl.
-      induction H2.
-      * inversion H1.
-      * apply IHarbitrary_eval'; auto.
+    + inversion H1.
+      inversion H4.
   - induction H.
    + apply ArE'_nil.
    + eapply ArE'_cons.
     * apply H.
-    * apply sg_mono_inc.
-      apply H0.
+    * inversion H0; subst.
+      eapply E'_Call.
+      apply sg_mono_inc.
+      apply H3.
     * apply IHarbitrary_eval'.
 Qed.
 
@@ -162,8 +167,10 @@ Proof.
       + apply ArE'_nil.
       + eapply ArE'_cons.
         * apply H.
-        * exists n.
-          apply H0.
+        * inversion H0; subst.
+          eapply E'_Call.
+          exists n.
+          apply H3.
         * auto.
   }
   {
@@ -222,21 +229,23 @@ Proof.
       + exists 1; simpl.
         apply E'_Reentry.
         apply ArE'_nil.
-      + destruct H0 as [n1 ?].
+      + inversion H0; subst.
+        destruct H3 as [n1 ?].
         destruct IHarbitrary_eval' as [n2 ?].
-        apply (sg_mono_inc _ _ _ _ _ _ 1) in H2.
-        replace (n2 + 1) with (S n2) in H2; [| omega].
-        simpl in H2.
-        inversion H2; subst.
+        apply (sg_mono_inc _ _ _ _ _ _ 1) in H3.
+        replace (n2 + 1) with (S n2) in H3; [| omega].
+        simpl in H3.
+        inversion H3; subst.
         exists (S n1 + n2); simpl.
         apply E'_Reentry.
         eapply ArE'_cons.
         * apply H.
-        * apply sg_mono_inc.
-          apply H0.
+        * eapply E'_Call.
+          apply sg_mono_inc.
+          apply H2.
         * rewrite Nat.add_comm.
           apply arbitrary_eval'_mono_inc.
-          apply H6.
+          apply H7.
   }
 Qed.
 
@@ -261,9 +270,12 @@ Proof.
     * apply E_Reentry.
       induction H.
       - apply ArE_nil.
-      - eapply ArE_cons.
+      - inversion H0; subst.
+        eapply ArE_cons.
         ++ apply H.
-        ++ apply IHn. apply H0.
+        ++ apply IHn in H3.
+           eapply E_Call.
+           apply H3.
         ++ apply IHarbitrary_eval'.
 Qed.
 
@@ -291,7 +303,7 @@ Proof.
       apply ArE'_nil.
     + destruct IHarbitrary_eval as [n ?].
       admit.
-Admitted.
+Abort.
 
 Fact pass' : False. Admitted.
 Ltac pass := pose proof pass' as Htest; inversion Htest.
@@ -316,12 +328,14 @@ Proof.
   - apply E_Reentry.
     induction H.
     + apply ArE_nil.
-    + destruct H0.
-      apply sg_n_ceval in H0.
+    + inversion H0; subst.
+      destruct H3.
+      apply sg_n_ceval in H2.
       eapply ArE_cons.
-      apply H.
-      apply H0.
-      apply IHarbitrary_eval'.
+      * apply H.
+      * eapply E_Call.
+        apply H2.
+      * apply IHarbitrary_eval'.
 Qed.
 
 Lemma abeval'_abeval (fc: func_context) (lf: public_funcs) (loc glb1 glb2: unit_state) :
@@ -331,9 +345,11 @@ Proof.
   induction H.
   + apply ArE_nil.
   + (* Possibly the follwing line causes the trouble *)
-    apply sigma_ceval'_equiv in H0.
-    apply ceval'_ceval in H0.
-    pose proof ArE_cons _ _ _ _ _ _ _ _ _ H H0 IHarbitrary_eval'.
+    inversion H0; subst.
+    apply sigma_ceval'_equiv in H3.
+    apply ceval'_ceval in H3.
+    apply E_Call in H3.
+    pose proof ArE_cons _ _ _ _ _ _ _ _ H H3 IHarbitrary_eval'.
     apply H2.
 Qed.
 
@@ -361,9 +377,17 @@ Proof.
     exact H.
 }
 {
-  pass.
+  clear abeval_abeval'.
+  intros.
+  induction H.
+  - apply ArE'_nil.
+  - apply ceval_ceval' in H0.
+    eapply ArE'_cons.
+    + apply H.
+    + apply H0.
+    + apply IHarbitrary_eval.
 }
-Admitted.
+Qed.
 
 Lemma ceval'_ceval_equiv (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
   ceval' sigma fc lf c st1 st2 <-> ceval fc lf c st1 st2

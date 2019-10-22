@@ -146,9 +146,11 @@ Inductive ceval : func_context -> public_funcs -> com -> state -> state -> Prop 
       ceval fc lf CReentry (loc, glb1) (loc, glb2)
 with arbitrary_eval: forall (fc: func_context) (lf: public_funcs) (loc : unit_state), unit_state -> unit_state -> Prop :=
   | ArE_nil: forall fc lf loc gl, arbitrary_eval fc lf loc gl gl
-  | ArE_cons: forall fc lf loc loc1 loc2 gl1 gl2 gl3 f,
+(*   | ArE_cons: forall fc lf loc loc1 loc2 gl1 gl2 gl3 f, *)
+  | ArE_cons: forall fc lf loc pv gl1 gl2 gl3 f,
                 In f lf ->
-                ceval fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) ->
+(*                 ceval fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) -> *)
+                ceval fc lf (CCall f pv) (loc, gl1) (loc, gl2) ->
                 arbitrary_eval fc lf loc gl2 gl3 ->
                 arbitrary_eval fc lf loc gl1 gl3.
 
