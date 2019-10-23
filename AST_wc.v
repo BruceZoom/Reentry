@@ -2,6 +2,8 @@ Require Import Coq.Bool.Bool.
 Require Import Coq.Arith.Arith.
 Require Import Coq.Lists.List.
 
+Require Import FunctionalExtensionality.
+
 Definition ident : Type := nat.
 Definition ident' : Type := bool (* is global *) * ident.
 
@@ -102,13 +104,48 @@ Definition public_funcs : Type := list func.
 (** Function Support *)
 Fixpoint param_to_local_state (st : state) (prm_name : list ident) (prm_value : list aexp) : unit_state :=
   match prm_name with
-  | nil => empty_state
+  | nil => fst st
+(*   | nil => empty_state *)
   | x :: tx =>
     match prm_value with
     | nil => empty_state
     | v :: tv => update_unit_state (param_to_local_state st tx tv) x (aeval st v)
     end
   end.
+(** [] *)
+
+(** Reentry Completeness Support *)
+Fixpoint local_aexp (a : aexp) : Prop :=
+  match a with
+  | ANum _ => True
+  | AId X => match X with
+             | (false, _) => True
+             | _ => False
+             end
+  | APlus a1 a2 => (local_aexp a1) /\ (local_aexp a2)
+  | AMinus a1 a2 => (local_aexp a1) /\ (local_aexp a2)
+  | AMult a1 a2 => (local_aexp a1) /\ (local_aexp a2)
+end.
+
+(* Lemma used in reentry completeness to extract state before calling *)
+Lemma undo_param_existence : forall loc glb pn,
+  exists loc' pv,
+    param_to_local_state (loc', glb) pn pv = loc.
+Proof.
+  intros.
+  induction pn.
+  - exists loc, nil.
+    auto.
+  - destruct IHpn as [loc' [pv ?]].
+    exists loc', ((ANum (loc a)) :: pv).
+    simpl in *.
+    apply functional_extensionality.
+    intros.
+    unfold update_unit_state.
+    destruct (Nat.eq_dec a x); subst.
+    + auto.
+    + auto.
+Qed.
 (** [] *)
 
 (** Denotational Semantics *)
@@ -142,18 +179,18 @@ Inductive ceval : func_context -> public_funcs -> com -> state -> state -> Prop 
       ceval fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2) ->
       ceval fc lf (CCall f pv) (loc1, glb1) (loc1, glb2)
   | E_Reentry : forall fc lf loc glb1 glb2,
-      arbitrary_eval fc lf loc glb1 glb2 ->
+      arbitrary_eval fc lf glb1 glb2 ->
       ceval fc lf CReentry (loc, glb1) (loc, glb2)
-with arbitrary_eval: forall (fc: func_context) (lf: public_funcs) (loc : unit_state), unit_state -> unit_state -> Prop :=
-  | ArE_nil: forall fc lf loc gl, arbitrary_eval fc lf loc gl gl
+with arbitrary_eval: forall (fc: func_context) (lf: public_funcs), unit_state -> unit_state -> Prop :=
+  | ArE_nil: forall fc lf gl, arbitrary_eval fc lf gl gl
 (*   | ArE_cons: forall fc lf loc loc1 loc2 gl1 gl2 gl3 f, *)
   | ArE_cons: forall fc lf loc pv gl1 gl2 gl3 f,
                 In f lf ->
 (*                 ceval fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) -> *)
+(*         TODO: Why only does the global belong to the host contract??? *)
                 ceval fc lf (CCall f pv) (loc, gl1) (loc, gl2) ->
-                arbitrary_eval fc lf loc gl2 gl3 ->
-                arbitrary_eval fc lf loc gl1 gl3.
-
+                arbitrary_eval fc lf gl2 gl3 ->
+                arbitrary_eval fc lf gl1 gl3.
 (*   | ArE_cons: forall fc lf loc gl1 gl2 gl3 f pv,
                 In f lf ->
                 ceval fc lf (CCall f (map (fun v => ANum v) pv)) (loc, gl1) (loc, gl2) ->

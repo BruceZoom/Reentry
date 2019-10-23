@@ -61,17 +61,17 @@ Inductive ceval' (sigma : semantic) (fc : func_context) (lf : public_funcs) : co
       sigma fc lf (func_bdy f) ((param_to_local_state (loc1, glb1) (func_arg f) pv), glb1) (loc2, glb2) ->
       ceval' sigma fc lf (CCall f pv) (loc1, glb1) (loc1, glb2)
   | E'_Reentry : forall loc glb1 glb2,
-      arbitrary_eval' sigma fc lf loc glb1 glb2 ->
+      arbitrary_eval' sigma fc lf glb1 glb2 ->
       ceval' sigma fc lf CReentry (loc, glb1) (loc, glb2)
-with arbitrary_eval' (sigma: semantic) (fc: func_context) (lf: public_funcs): unit_state -> unit_state -> unit_state -> Prop :=
-  | ArE'_nil: forall loc gl, arbitrary_eval' sigma fc lf loc gl gl
+with arbitrary_eval' (sigma: semantic) (fc: func_context) (lf: public_funcs): unit_state -> unit_state -> Prop :=
+  | ArE'_nil: forall gl, arbitrary_eval' sigma fc lf gl gl
 (*   | ArE'_cons: forall loc loc1 loc2 gl1 gl2 gl3 f, *)
   | ArE'_cons: forall loc pv gl1 gl2 gl3 f,
       In f lf ->
 (*       sigma fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) -> *)
       ceval' sigma fc lf (CCall f pv) (loc, gl1) (loc, gl2) ->
-      arbitrary_eval' sigma fc lf loc gl2 gl3 ->
-      arbitrary_eval' sigma fc lf loc gl1 gl3.
+      arbitrary_eval' sigma fc lf gl2 gl3 ->
+      arbitrary_eval' sigma fc lf gl1 gl3.
 
 
 Module FixpointSigma.
@@ -117,13 +117,13 @@ Proof.
       * apply IHarbitrary_eval'.
 Qed.
 
-Lemma arbitrary_eval'_mono_inc : forall fc lf loc gl1 gl2 n1 n2,
-  arbitrary_eval' (sg n1) fc lf loc gl1 gl2 ->
-  arbitrary_eval' (sg (n1 + n2)) fc lf loc gl1 gl2.
+Lemma arbitrary_eval'_mono_inc : forall fc lf gl1 gl2 n1 n2,
+  arbitrary_eval' (sg n1) fc lf gl1 gl2 ->
+  arbitrary_eval' (sg (n1 + n2)) fc lf gl1 gl2.
 Proof.
   intros.
   revert H.
-  revert loc gl1 gl2 n2.
+  revert gl1 gl2 n2.
   induction n1; intros.
   - inversion H; subst.
     + apply ArE'_nil.
@@ -285,7 +285,7 @@ Proof.
         ++ apply IHarbitrary_eval'.
 Qed.
 
-Lemma ceval_sg_n fc lf: forall c st1 st2,
+(* Lemma ceval_sg_n fc lf: forall c st1 st2,
   ceval fc lf c st1 st2 ->
   exists n, sg n fc lf c st1 st2.
 Proof.
@@ -309,7 +309,7 @@ Proof.
       apply ArE'_nil.
     + destruct IHarbitrary_eval as [n ?].
       admit.
-Abort.
+Abort. *)
 
 Fact pass' : False. Admitted.
 Ltac pass := pose proof pass' as Htest; inversion Htest.
@@ -344,8 +344,8 @@ Proof.
       * apply IHarbitrary_eval'.
 Qed.
 
-Lemma abeval'_abeval (fc: func_context) (lf: public_funcs) (loc glb1 glb2: unit_state) :
-  arbitrary_eval' sigma fc lf loc glb1 glb2 -> arbitrary_eval fc lf loc glb1 glb2.
+Lemma abeval'_abeval (fc: func_context) (lf: public_funcs) (glb1 glb2: unit_state) :
+  arbitrary_eval' sigma fc lf glb1 glb2 -> arbitrary_eval fc lf glb1 glb2.
 Proof.
   intros.
   induction H.
@@ -361,8 +361,8 @@ Qed.
 
 Lemma ceval_ceval' (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
   ceval fc lf c st1 st2 -> ceval' sigma fc lf c st1 st2
-with abeval_abeval' (fc: func_context) (lf: public_funcs) (loc glb1 glb2: unit_state) :
-  arbitrary_eval fc lf loc glb1 glb2 -> arbitrary_eval' sigma fc lf loc glb1 glb2.
+with abeval_abeval' (fc: func_context) (lf: public_funcs) (glb1 glb2: unit_state) :
+  arbitrary_eval fc lf glb1 glb2 -> arbitrary_eval' sigma fc lf glb1 glb2.
 Proof.
 {
   clear ceval_ceval'.
@@ -397,16 +397,16 @@ Qed.
 
 Lemma ceval'_ceval_equiv (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
   ceval' sigma fc lf c st1 st2 <-> ceval fc lf c st1 st2
-with abeval'_abeval_equiv (fc: func_context) (lf: public_funcs) (loc glb1 glb2: unit_state) :
-  arbitrary_eval' sigma fc lf loc glb1 glb2 <-> arbitrary_eval fc lf loc glb1 glb2.
+with abeval'_abeval_equiv (fc: func_context) (lf: public_funcs) (glb1 glb2: unit_state) :
+  arbitrary_eval' sigma fc lf glb1 glb2 <-> arbitrary_eval fc lf glb1 glb2.
 Proof.
   - clear ceval'_ceval_equiv.
     pose proof ceval_ceval' fc lf c st1 st2.
     pose proof ceval'_ceval fc lf c st1 st2.
     tauto.
   - clear abeval'_abeval_equiv.
-    pose proof abeval_abeval' fc lf loc glb1 glb2.
-    pose proof abeval'_abeval fc lf loc glb1 glb2.
+    pose proof abeval_abeval' fc lf glb1 glb2.
+    pose proof abeval'_abeval fc lf glb1 glb2.
     tauto.
 Qed.
 End FixpointSigma.
@@ -512,7 +512,7 @@ Proof.
   induction H4; [exact H3 |].
   apply IHarbitrary_eval'; clear IHarbitrary_eval'.
   inversion H2; subst.
-  remember (param_to_local_state (loc, gl1) (func_arg f) pv) as loc1.
+  remember (param_to_local_state (loc0, gl1) (func_arg f) pv) as loc1.
   pose proof H0 _ _ _ (H _ _ H1) _ (loc2, gl2) (Hglb _ _ loc1 _ H3) H6.
   eapply Hglb.
   apply H5.
@@ -620,30 +620,50 @@ Module abevals.
   Why???
 *)
 
-Definition reCall_semantic fc lf loc : unit_state -> unit_state -> Prop :=
-  fun glb1 glb2 => forall f pv,
-    In f lf ->
+Definition reCall_semantic fc lf : unit_state -> unit_state -> Prop :=
+  fun glb1 glb2 => exists f pv loc,
+    In f lf /\
     ceval fc lf (CCall f pv) (loc, glb1) (loc, glb2).
 
-Definition abeval_n1 fc lf loc := clos_refl_trans_n1 (reCall_semantic fc lf loc).
+Definition abeval_n1 fc lf := clos_refl_trans_n1 (reCall_semantic fc lf).
 
-Definition abeval_1n fc lf loc := clos_refl_trans_1n (reCall_semantic fc lf loc).
+Definition abeval_1n fc lf := clos_refl_trans_1n (reCall_semantic fc lf).
 
-Definition abeval fc lf loc := clos_refl_trans (reCall_semantic fc lf loc).
+Definition abeval fc lf := clos_refl_trans (reCall_semantic fc lf).
 
-Lemma arbitrary_eval_abeval_1n fc lf loc : forall glb1 glb2,
-  arbitrary_eval fc lf loc glb1 glb2 <-> abeval_1n fc lf loc glb1 glb2.
+Lemma arbitrary_eval_abeval_1n fc lf : forall glb1 glb2,
+  arbitrary_eval fc lf glb1 glb2 <-> abeval_1n fc lf glb1 glb2.
 Proof.
   split; intros.
   {
     induction H.
     - apply rt1n_refl.
-    - admit.
+    - eapply rt1n_trans.
+      2:{ apply IHarbitrary_eval. }
+      unfold reCall_semantic.
+      exists f, pv, loc.
+      auto.
   }
   {
-    admit.
+    induction H.
+    - apply ArE_nil.
+    - destruct H as [f [pv [loc [? ?]]]].
+      eapply ArE_cons.
+      + apply H.
+      + apply H1.
+      + apply IHclos_refl_trans_1n. 
   }
-Admitted.
+Qed.
+
+Lemma abeval_1n_n1_iff fc lf : forall glb1 glb2,
+  abeval_1n fc lf glb1 glb2 <-> abeval_n1 fc lf glb1 glb2.
+Proof.
+  intros.
+  unfold abeval_1n, abeval_n1.
+  rewrite <- Operators_Properties.clos_rt_rt1n_iff.
+  rewrite <- Operators_Properties.clos_rt_rtn1_iff.
+  tauto.
+Qed.
 
 (* Inductive arbitrary_eval_trans: forall (fc: func_context) (lf: public_funcs) (loc : unit_state), unit_state -> unit_state -> Prop :=
   | ArE_step: 
@@ -672,10 +692,11 @@ Module Completeness.
 Definition reentry_semantic fc lf (st1 st2 : state) : Prop :=
   match st1, st2 with
   | (loc1, glb1), (loc2, glb2) =>
-      arbitrary_eval fc lf loc1 glb1 glb2 /\ loc1 = loc2
+      arbitrary_eval fc lf glb1 glb2 /\ loc1 = loc2
   end.
 
 Import HoareLogic.
+Import abevals.
 
 Lemma hoare_reentry_complete: forall fc lf fp P Q,
   valid fc lf ({{P}} Re {{Q}}) ->
@@ -720,8 +741,23 @@ Proof.
       exists (loc0, glb0).
       split; auto.
       simpl in *.
-      pose proof E_Call.
-      admit.
+      pose proof undo_param_existence loc1 glb1 (func_arg f) as [loc' [pv ?]].
+      pose proof E_Call fc lf f pv loc' loc2 glb1 glb2.
+      rewrite H4 in H5.
+      specialize (H5 H2).
+      assert (reCall_semantic fc lf glb1 glb2).
+      {
+        unfold reCall_semantic.
+        exists f, pv, loc'.
+        auto.
+      }
+      destruct H3.
+      split; auto.
+      rewrite arbitrary_eval_abeval_1n in *.
+      rewrite abeval_1n_n1_iff in *.
+      eapply rtn1_trans.
+      -- apply H6.
+      -- apply H3.
   + unfold derives.
     intros. subst.
     destruct H1 as [loc [? [[loc0 glb0] [? [? ?]]]]].
@@ -732,7 +768,7 @@ Proof.
     - apply H1.
     - apply E_Reentry.
       apply H2.
-Admitted.
+Qed.
 
 Lemma hoare_triple_complete: forall fc lf fp tr,  
   valid fc lf tr ->

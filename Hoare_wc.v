@@ -130,11 +130,11 @@ Proof.
   induction H4.
   - exact H5.
   - inversion H6; subst.
-    remember (param_to_local_state (loc, gl1) (func_arg f) pv) as loc1.
+    remember (param_to_local_state (loc0, gl1) (func_arg f) pv) as loc1.
     pose proof H0 _ loc1 _ H5.
     pose proof H1 f H4 _ _ H11 H8.
     apply (H0 _ loc _) in H9.
-    apply E_Reentry in H7.
+    eapply E_Reentry in H7.
     pose proof IHarbitrary_eval H1 (H _ _ _ H3) H9 H7.
     exact H10.
 Qed.
