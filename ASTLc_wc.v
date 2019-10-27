@@ -328,9 +328,52 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         ((LWhile b (com_to_label_pure c)) :: nil) (l2 :: bstk2)
         st (sstk2, glb2) ->
       ceval' fc (CWhile b c)
-        (l1 :: bstk1) (l2 :: bstk2)
+        ((LWhile b l1) :: bstk1) (l2 :: bstk2)
         (sstk1, glb1) (sstk2, glb2)
 .
+
+Lemma ceval'_valid_label :
+  forall fc c l1 l2 bstk1 bstk2 st1 st2,
+  ceval' fc c (l1 :: bstk1) (l2 :: bstk2) st1 st2 ->
+  valid_label l1 /\ valid_label l2.
+Proof.
+  intros.
+  assert (valid_label LPure); [left; apply IP_Pure |].
+  assert (valid_label LHere); [right; apply SP_Here |].
+  inversion H; subst;
+  try (split; left; apply IP_Pure);
+  try pose proof com_to_label_pure_is_pure c1 as Hpc1;
+  try pose proof com_to_label_pure_is_pure c2 as Hpc2;
+  try pose proof com_to_label_pure_is_pure c0 as Hpc0;
+  try tauto.
+  - destruct H6, H9.
+    + split; left; apply IP_Seq; auto.
+    + split; [left; apply IP_Seq | right; apply SP_Seq2]; auto.
+    + split; [right; apply SP_Seq1 | left; apply IP_Seq]; auto.
+    + split; right; [apply SP_Seq1 | apply SP_Seq2]; auto.
+Admitted.
+
+Corollary ceval'_valid_label_left :
+  forall fc c l1 bstk1 bstk2 st1 st2,
+  ceval' fc c (l1 :: bstk1) bstk2 st1 st2 ->
+  valid_label l1.
+Proof.
+  intros.
+  destruct bstk2; [inversion H |].
+  apply ceval'_valid_label in H.
+  tauto.
+Qed.
+
+Corollary ceval'_valid_label_right :
+  forall fc c l2 bstk1 bstk2 st1 st2,
+  ceval' fc c bstk1 (l2 :: bstk2) st1 st2 ->
+  valid_label l2.
+Proof.
+  intros.
+  destruct bstk1; [inversion H |].
+  apply ceval'_valid_label in H.
+  tauto.
+Qed.
 
 Lemma ceval'_depth_valid : forall fc c bstk1 bstk2 sstk1 sstk2 glb1 glb2,
   ceval' fc c bstk1 bstk2 (sstk1, glb1) (sstk2, glb2) ->
@@ -346,6 +389,54 @@ Proof.
   - simpl. repeat rewrite app_length.
     rewrite H10, H11. auto.
 Qed.
+
+Corollary ceval'_depth_valid_left : forall fc c bstk1 bstk2 sstk1 glb1 st2,
+  ceval' fc c bstk1 bstk2 (sstk1, glb1) st2 ->
+  length bstk1 = length sstk1.
+Proof.
+  intros.
+  destruct st2.
+  apply ceval'_depth_valid in H.
+  tauto.
+Qed.
+
+Corollary ceval'_depth_valid_right : forall fc c bstk1 bstk2 st1 sstk2 glb2,
+  ceval' fc c bstk1 bstk2 st1 (sstk2, glb2) ->
+  length bstk2 = length sstk2.
+Proof.
+  intros.
+  destruct st1.
+  apply ceval'_depth_valid in H.
+  tauto.
+Qed.
+
+Definition single_point_stack bstk : Prop :=
+  forall lb, In lb bstk -> single_point lb.
+
+Lemma ceval'_single_point_stack_left :
+  forall fc c l1 bstk1 bstk2 st1 st2,
+  single_point l1 ->
+  ceval' fc c (l1 :: bstk1) bstk2 st1 st2 ->
+  single_point_stack bstk1.
+Proof.
+  unfold single_point_stack.
+  intros.
+  inversion H0; subst;
+  try (inversion H1; tauto).
+  - revert dependent sstk.
+    induction bstk; intros.
+    + inversion H1; subst; [auto | inversion H2].
+    + inversion H1; subst.
+      * pose proof ceval'_valid_label_left _ _ _ _ _ _ _ H11 as [? | ?].
+        {
+          admit.
+        }
+        {
+          auto.
+        }
+      * eapply IHbstk.
+        exact H2.
+Admitted.
 (** [] *)
 
 Lemma length_nil_app_cons {A : Type} : forall l a,
@@ -392,6 +483,11 @@ Inductive middle_ceval' : func_context -> list func -> restk -> restk -> Prop :=
 Definition multi_ceval' (fc : func_context) (lf : public_funcs) : restk -> restk -> Prop := clos_refl_trans (middle_ceval' fc lf).
 (** [] *)
 
+(** Length Support? *)
+Ltac auto_len :=
+  auto;
+  try (rewrite app_length; auto).
+(** [] *)
 
 Lemma middle_ceval'_seq_head_some:
   forall fc lf c1 c2 l1 l2 st1 st2 stk1 stk2 bstk,
@@ -503,6 +599,66 @@ Proof.
     +
 Admitted.
 
+Lemma multi_ceval'_seq_tail:
+  forall l1 fc lf c1 c2 st1 st0 bstk,
+  single_point l1 ->
+  clos_refl_trans (middle_ceval' fc lf)
+      ((c1, Some ((com_to_label_pure c1) :: nil), st1) :: nil)
+      ((c1, Some (l1 :: bstk), st0) :: nil) ->
+  clos_refl_trans (middle_ceval' fc lf)
+      ((CSeq c1 c2, Some ((LSeq (com_to_label_pure c1) (com_to_label_pure c2)) :: nil), st1) :: nil)
+      ((CSeq c1 c2, Some ((LSeq l1 (com_to_label_pure c2)) :: bstk), st0) :: nil).
+Proof.
+  intros.
+Admitted.
+
+Lemma multi_ceval'_if_branch:
+  forall fc lf b c1 c2 l1 st3 st2 bstk,
+  single_point l1 ->
+  clos_refl_trans (middle_ceval' fc lf)
+    ((c1, Some (l1 :: bstk), st3) :: nil)
+    ((c1, None, st2) :: nil) ->
+  clos_refl_trans (middle_ceval' fc lf)
+    ((CIf b c1 c2, Some ((LIf b l1 (com_to_label_pure c2)) :: bstk), st3) :: nil)
+    ((CIf b c1 c2, None, st2) :: nil).
+Proof.
+  intros.
+Admitted.
+
+Lemma multi_ceval'_else_branch:
+  forall fc lf b c1 c2 l1 st3 st2 bstk,
+  single_point l1 ->
+  clos_refl_trans (middle_ceval' fc lf)
+    ((c2, Some (l1 :: bstk), st3) :: nil)
+    ((c2, None, st2) :: nil) ->
+  clos_refl_trans (middle_ceval' fc lf)
+    ((CIf b c1 c2, Some ((LIf b (com_to_label_pure c1) l1) :: bstk), st3) :: nil)
+    ((CIf b c1 c2, None, st2) :: nil).
+Proof.
+  intros.
+Admitted.
+
+Lemma multi_ceval'_while_loop:
+  forall fc lf b c l1 loc1 glb1 st2 bstk,
+  beval (loc1, glb1) b = true ->
+  clos_refl_trans (middle_ceval' fc lf)
+    ((c, Some (com_to_label_pure c :: nil), (loc1 :: nil, glb1)) :: nil)
+    ((c, Some (l1 :: bstk), st2) :: nil) ->
+  clos_refl_trans (middle_ceval' fc lf)
+    ((CWhile b c, Some ((LWhile b (com_to_label_pure c)) :: nil), (loc1 :: nil, glb1)) :: nil)
+    ((CWhile b c, Some ((LWhile b l1) :: bstk), st2) :: nil).
+Proof.
+  intros.
+Admitted.
+
+Lemma multi_ceval'_elevate:
+  forall fc lf c bstk1 bstk2 st1 st2 stk,
+  multi_ceval' fc lf ((c, bstk1, st1) :: nil) ((c, bstk2, st2) :: nil) ->
+  multi_ceval' fc lf ((c, bstk1, st1) :: stk) ((c, bstk2, st2) :: stk).
+Proof.
+  intros.
+Admitted.
+
 (** Denotational Sematics Relation *)
 Theorem ceval_multi_ceval' : forall fc lf c loc1 loc2 glb1 glb2,
     ceval fc lf c (loc1, glb1) (loc2, glb2) ->
@@ -510,13 +666,13 @@ Theorem ceval_multi_ceval' : forall fc lf c loc1 loc2 glb1 glb2,
       ((c, Some ((com_to_label_pure c) :: nil), ((loc1 :: nil), glb1)) :: nil)
       ((c, None, ((loc2 :: nil), glb2)) :: nil)
   with arbitrary_eval_multi_ceval' : forall fc lf loc glb1 glb2 bstk sstk,
-    arbitrary_eval fc lf loc glb1 glb2 ->
+    arbitrary_eval fc lf glb1 glb2 ->
     forall lb c,
     single_point lb ->
     length bstk = length sstk ->
     multi_ceval' fc lf
-      ((c, Some (lb :: bstk), (loc :: sstk, glb1)) :: nil)
-      ((c, Some (lb :: bstk), (loc :: sstk, glb2)) :: nil).
+      ((c, Some (bstk ++ lb :: nil), (sstk ++ loc :: nil, glb1)) :: nil)
+      ((c, Some (bstk ++ lb :: nil), (sstk ++ loc :: nil, glb2)) :: nil).
 Proof.
 {
   intros.
@@ -540,20 +696,285 @@ Proof.
   - destruct st2 as (loc3, glb3); subst.
     specialize (IHceval1 glb3 glb1 loc3 eq_refl loc1 eq_refl).
     specialize (IHceval2 glb2 glb3 loc2 eq_refl loc3 eq_refl).
-    admit.  (* Seq *)
-  - admit.  (* If Branch *)
-  - admit.  (* Else Branch *)
-  - admit.  (* Loop Exit *)
-  - admit.  (* Loop Execute *)
-  - admit.  (* Call *)
-  - admit.  (* Reentry *)
+    simpl.
+    apply Operators_Properties.clos_rt_rtn1 in IHceval1.
+    apply Operators_Properties.clos_rt_rt1n in IHceval2.
+    inversion IHceval1; subst; inversion IHceval2; subst.
+    + inversion H1; subst; inversion H3; subst.
+      * inversion H4; subst.
+        2:{ inversion H5. } clear H4.
+        inversion H2; subst.
+        {
+          apply rt_step, ME_r_pure.
+          eapply E'_Seq; auto.
+          apply com_to_label_pure_valid.
+          apply com_to_label_pure_is_pure.
+          apply com_to_label_pure_is_pure.
+          apply com_to_label_pure_valid.
+          exact H9. exact H13.
+        }
+        {
+          destruct bstk as [| l1]; [inversion H4 |].
+          assert (single_point l1);
+          [inversion H4; assumption |].
+          apply Operators_Properties.clos_rtn1_rt in H2.
+          eapply multi_ceval'_seq_tail in H2.
+          eapply rt_trans.
+          apply H2.
+          apply rt_step, ME_r_pure.
+          destruct st1 as [sstk' glb'].
+          eapply E'_Seq.
+          + right; exact H6.
+          + apply com_to_label_pure_is_pure.
+          + apply com_to_label_pure_is_pure.
+          + apply com_to_label_pure_valid.
+          + apply ceval'_depth_valid_left in H9.
+            auto.
+          + auto.
+          + exact H9.
+          + exact H13.
+          + exact H6.
+        }
+      * destruct bstk as [| l1 bstk1]; [inversion H9 |].
+        pose proof H9 as Htmp1.
+        pose proof H14 as Htmp2.
+        pose proof Htmp1 as Htmp3.
+        pose proof Htmp2 as Htmp4.
+        apply ceval'_valid_label_left in Htmp1.
+        apply ceval'_valid_label_right in Htmp2.
+        destruct st1 as [[| loc' sstk'] glb'];
+        apply ceval'_depth_valid_left in Htmp3; [inversion Htmp3 |].
+        destruct st2 as [[| loc'' stk''] glb''];
+        apply ceval'_depth_valid_right in Htmp4; [inversion Htmp4 |].
+        pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ _ _ _ _ Htmp1 (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) Htmp2 Htmp3 Htmp4 H9 H14; clear Htmp1 Htmp2 Htmp3 Htmp4.
+        apply Operators_Properties.clos_rt1n_rt in H4.
+        inversion H2; subst.
+        {
+          eapply multi_ceval'_seq_head in H4; auto.
+          eapply rt_trans; [| exact H4].
+          apply rt_step, ME_r_single; auto.
+          apply SP_Seq2, H13. apply com_to_label_pure_is_pure.
+        }
+        {
+          assert (single_point l1).
+          {
+            inversion H6; assumption.
+          }
+          apply Operators_Properties.clos_rtn1_rt in H2.
+          eapply multi_ceval'_seq_tail in H2; try assumption.
+          eapply multi_ceval'_seq_head in H4; try assumption.
+          eapply ME_r_single, rt_step in H5.
+          {
+            eapply rt_trans.
+            apply H2.
+            eapply rt_trans.
+            apply H5.
+            apply H4.
+          }
+          {
+            apply SP_Seq2.
+            apply com_to_label_pure_is_pure.
+            assumption.
+          }
+        }
+      * pose proof com_to_label_pure_no_point c2.
+        tauto.
+  - subst.
+    specialize (IHceval glb2 glb1 loc2 eq_refl loc1 eq_refl).
+    apply Operators_Properties.clos_rt_rt1n in IHceval.
+    inversion IHceval; subst.
+    inversion H1; subst.
+    + inversion H2; subst; [| inversion H3].
+      eapply E'_IfTrue, ME_r_pure, rt_step in H10; auto.
+      * exact H10.
+      * apply com_to_label_pure_is_pure.
+      * apply com_to_label_pure_valid.
+      * auto.
+    + apply Operators_Properties.clos_rt1n_rt in H2.
+      eapply multi_ceval'_if_branch in H2.
+      eapply rt_trans.
+      2:{ exact H2. }
+      apply rt_step, ME_r_single; auto.
+      * apply SP_If1; [exact H10 | apply com_to_label_pure_is_pure].
+      * pose proof H11 as Htmp.
+        destruct st2 as [[| loc' sstk'] glb'];
+        apply ceval'_depth_valid_right in Htmp; [inversion Htmp |].
+        apply E'_IfTrue; auto.
+        ++ apply com_to_label_pure_is_pure.
+        ++ right. exact H10.
+      * exact H10.
+    + pose proof com_to_label_pure_no_point c1.
+      congruence.
+  - subst.
+    specialize (IHceval glb2 glb1 loc2 eq_refl loc1 eq_refl).
+    apply Operators_Properties.clos_rt_rt1n in IHceval.
+    inversion IHceval; subst.
+    inversion H1; subst.
+    + inversion H2; subst; [| inversion H3].
+      eapply E'_IfFalse, ME_r_pure, rt_step in H10; auto.
+      * exact H10.
+      * apply com_to_label_pure_is_pure.
+      * apply com_to_label_pure_valid.
+      * auto.
+    + apply Operators_Properties.clos_rt1n_rt in H2.
+      eapply multi_ceval'_else_branch in H2.
+      eapply rt_trans.
+      2:{ exact H2. }
+      apply rt_step, ME_r_single; auto.
+      * apply SP_If2; [apply com_to_label_pure_is_pure | exact H10].
+      * pose proof H11 as Htmp.
+        destruct st2 as [[| loc' sstk'] glb'];
+        apply ceval'_depth_valid_right in Htmp; [inversion Htmp |].
+        apply E'_IfFalse; auto.
+        ++ apply com_to_label_pure_is_pure.
+        ++ right. exact H10.
+      * exact H10.
+    + pose proof com_to_label_pure_no_point c2.
+      congruence.
+  - subst.
+    inversion Heqst1; subst.
+    apply rt_step, ME_r_pure, E'_WhileFalse.
+    exact H.
+  - subst.
+    destruct st2 as [loc3 glb3].
+    specialize (IHceval1 glb3 glb1 loc3 eq_refl loc1 eq_refl).
+    specialize (IHceval2 glb2 glb3 loc2 eq_refl loc3 eq_refl).
+    simpl in *.
+    apply Operators_Properties.clos_rt_rtn1 in IHceval1.
+    apply Operators_Properties.clos_rt_rt1n in IHceval2.
+    inversion IHceval1; inversion IHceval2; subst.
+    inversion H2; inversion H5; subst.
+    + inversion H6; subst.
+      2:{ inversion H4. }
+      inversion H3; subst.
+      {
+        assert (1 + @length label nil = length (loc2 :: nil)) as Htmp; auto.
+        pose proof E'_WhileTrue2 _ _ _ _ _ _ _ _ _ _ _ ltac: (apply IP_While, com_to_label_pure_is_pure) (com_to_label_pure_valid _) Htmp H H10 H20.
+        eapply rt_step, ME_r_pure, H4.
+      }
+      {
+        destruct bstk as [| l1 bstk]; [inversion H4 |].
+        assert (single_point l1); [inversion H4; assumption |].
+        eapply Operators_Properties.clos_rtn1_rt, multi_ceval'_while_loop in H3; try assumption; [| exact H].
+        eapply rt_trans; [apply H3 |].
+        apply rt_step, ME_r_pure.
+        destruct st1 as [sstk' glb'].
+        eapply E'_WhileSeg2; auto.
+        * apply com_to_label_pure_valid.
+        * apply ceval'_depth_valid_left in H10.
+          auto.
+        * exact H10.
+        * exact H20.
+      }
+    + apply Operators_Properties.clos_rt1n_rt in H6.
+      inversion H3; subst.
+      {
+        eapply rt_trans.
+        2:{ exact H6. }
+        apply rt_step, ME_r_single; auto.
+        destruct st3 as [sstk' glb'].
+        eapply E'_WhileTrue2; auto.
+        * apply IP_While, com_to_label_pure_is_pure.
+        * right; auto.
+        * apply ceval'_depth_valid_right in H21.
+          auto.
+        * exact H10.
+        * exact H21.
+      }
+      {
+        apply Operators_Properties.clos_rtn1_rt in H3.
+        destruct bstk as [| l1 bstk]; [inversion H10 |].
+        eapply multi_ceval'_while_loop in H3; [| exact H].
+        eapply rt_trans; [exact H3 |].
+        eapply rt_trans; [| exact H6].
+        inversion H5; subst.
+        apply rt_step, ME_r_single; auto.
+        destruct st1 as [sstk' glb'].
+        destruct st3 as [sstk'' glb''].
+        eapply E'_WhileSeg2.
+        + inversion H4; assumption.
+        + right; assumption.
+        + apply ceval'_depth_valid_left in H10. auto.
+        + apply ceval'_depth_valid_right in H19. auto.
+        + exact H10.
+        + exact H21.
+      }
+    + inversion H24.
+      pose proof com_to_label_pure_no_point c.
+      congruence.
+  - inversion Heqst1; inversion Heqst2; subst.
+    specialize (IHceval glb0 glb3 loc2 eq_refl (param_to_local_state (loc0, glb3) (func_arg f) pv) eq_refl).
+    
+    apply Operators_Properties.clos_rt_rt1n in IHceval.
+    inversion IHceval; subst.
+    inversion H0; subst.
+    + destruct st2 as [[|loc' [| sstk']] glb'].
+      * apply ceval'_depth_valid_right in H9.
+        simpl in H9. omega.
+      * eapply E'_CallPure in H9.
+        apply rt_step, ME_r_pure.
+        inversion H1; subst; [| inversion H2].
+        apply H9.
+      * apply ceval'_depth_valid_right in H9.
+        simpl in H9. omega.
+    + destruct st2 as [[| loc' sstk'] glb'];
+      pose proof H10; apply ceval'_depth_valid_right in H2; inversion H2.
+      clear H2.
+      
+(*       eapply E'_CallOut in H10. *)
+      (* call single point *)
+      admit.
+    + pose proof com_to_label_pure_no_point (func_bdy f).
+      congruence.
+  - inversion Heqst1; inversion Heqst2; subst.
+    clear Heqst1 Heqst2.
+    simpl in *.
+    apply Operators_Properties.clos_rtn1_rt.
+    eapply rtn1_trans.
+    eapply ME_r_pure.
+    apply E'_Reentryr2.
+    apply Operators_Properties.clos_rt_rtn1.
+    apply Operators_Properties.clos_rt1n_rt.
+    eapply rt1n_trans.
+    apply ME_r_single.
+    2:{ apply E'_Reentry1c. }
+    apply SP_Here.
+    apply Operators_Properties.clos_rt_rt1n.
+    replace (LHere :: nil) with (nil ++ LHere :: nil); [| auto].
+    replace (loc2 :: nil) with (nil ++ loc2 :: nil); [| auto].
+    apply arbitrary_eval_multi_ceval'.
+    exact H. apply SP_Here.
+    auto.
 }
 {
   intros.
   clear arbitrary_eval_multi_ceval'.
   induction H; subst.
-  - admit.
-  - admit.
+  - apply rt_refl.
+  - inversion H2; subst.
+    apply ceval_multi_ceval' in H7.
+    eapply rt_trans.
+    {
+      apply rt_step.
+      eapply ME_re.
+      + exact H.
+      + apply eq_refl.
+      + exact H0.
+      + simpl. omega.
+    }
+    eapply rt_trans.
+    {
+      apply multi_ceval'_elevate.
+      exact H7.
+    }
+    eapply rt_trans.
+    {
+      apply rt_step.
+      apply ME_ex.
+      + exact H0.
+      + simpl. omega.
+    }
+    exact IHarbitrary_eval.
 }
 Admitted.
 

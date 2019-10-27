@@ -10,6 +10,8 @@ Arguments clos_refl_trans {A} _ _ _.
 Arguments clos_refl_trans_1n {A} _ _ _.
 Arguments clos_refl_trans_n1 {A} _ _ _.
 
+Require Import FunctionalExtensionality.
+
 (* ceval' sigma c st1 st2
 
 sg n
@@ -770,7 +772,65 @@ Proof.
       apply H2.
 Qed.
 
-Lemma hoare_triple_complete: forall fc lf fp tr,  
+Lemma undo_P2A_existence : forall fc f prms P,
+  exists P', pv_to_assertion fc f prms P' = P.
+Proof.
+  intros.
+  unfold pv_to_assertion.
+  remember (func_arg f) as args.
+  clear Heqargs.
+  remember (rev args) as rargs.
+  apply eq_sym in Heqrargs.
+  revert dependent args.
+  revert prms.
+  induction rargs; intros.
+  - destruct args.
+    + simpl.
+      exists P.
+      apply functional_extensionality.
+      destruct x.
+      auto.
+    + pose proof eq_refl (length (rev (i :: args))).
+      rewrite Heqrargs in H at 1.
+      simpl in H. rewrite app_length in H.
+      simpl in H. omega.
+  - Search rev.
+    assert (rev (a :: rargs) = args).
+    {
+      rewrite <- Heqrargs.
+      apply rev_involutive.
+    }
+    clear Heqrargs.
+    simpl in H.
+(*     specialize (IHrargs (rev rargs) (rev_involutive _)) as [P' ?]. *)
+Admitted.
+
+Lemma hoare_call_complete: forall fc lf fp f prms P Q,
+  valid fc lf ({{P}} f [(prms)] {{Q}}) ->
+  fp = (fun (f : func) (P Q : Assertion) => valid fc lf ({{P}} func_bdy f {{Q}})) ->
+  provable fc lf fp ({{P}} f [(prms)] {{Q}}).
+Proof.
+  intros.
+  remember ((fun (st: state) => exists glb, P (fst st, glb)):Assertion) as R.
+  pose proof undo_P2A_existence fc f prms P as [P' ?].
+  pose proof ((fun (st: state) => exists loc, Q (loc, snd st)):Assertion) as Q'.
+  apply (hoare_consequence _ _ _ _ (pv_to_assertion fc f prms P' AND R) _ (Q' AND R)).
+  - unfold derives, andp.
+    intros.
+    split; [subst; auto |].
+    subst R.
+    exists (snd st).
+    destruct st; auto.
+  - eapply hoare_call.
+    + subst.
+      unfold valid, triple_valid in *.
+      intros.
+      destruct st1 as [loc1 glb1].
+      pose proof E_Call.
+(*       eapply E_Call in H1. *)
+Admitted.
+
+Lemma hoare_triple_complete: forall fc lf fp tr,
   valid fc lf tr ->
   fp = (fun (f : func) (P Q : Assertion) => valid fc lf ({{P}} func_bdy f {{Q}})) ->
   provable fc lf fp tr.
@@ -783,7 +843,9 @@ Proof.
   - admit.
   - admit.
   - admit.
-  - admit.
+  - pose proof E_Call.
+    pose proof hoare_call.
+    admit.
   - apply hoare_reentry_complete; auto.
 Admitted.
 
@@ -809,137 +871,5 @@ Proof.
 Qed.
 End Completeness.
 (** [] *)
-
-(*
-Definition fp_valid (fc : func_context) (lf : public_funcs) (fp : func_predicate) : Prop :=
-  forall f P Q,
-    In (P, Q) (fp f) ->
-    triple_valid fc lf ({{P}} (func_bdy f) {{Q}}).
-
-Notation "fc lf ||== fp" := (fp_valid fc lf fp) (at level 91, no associativity).
-
-Definition valid (fc : func_context) (lf : public_funcs) (fp : func_predicate) (tr : hoare_triple) : Prop :=
-  fp_valid fc lf fp ->
-  triple_valid fc lf tr.
-
-Notation "fc lf fp |== tr" := (valid fc lf fp tr) (at level 91, no associativity).
-
-(** Soundness *)
-Lemma reentry_sound fc lf fp :
-  forall P I,
-  localp P ->
-  globalp I ->
-  (forall f, In f lf ->
-    In (I, I) (fp f)) ->
-  valid fc lf fp ({{P AND I}} CReentry {{P AND I}}).
-Proof.
-  unfold valid, fp_valid, triple_valid.
-  unfold andp.
-  intros P I Hloc Hglb.
-  intros.
-  destruct H1.
-  inversion H2; subst.
-  split.
-  - eapply Hloc.
-    apply H1.
-  - clear H1 H2.
-    induction H4; [exact H3 |].
-    specialize (IHarbitrary_eval H H0).
-    pose proof H0 f I I (H _ H1) _ _ (Hglb _ _ _ H3) H2.
-    apply IHarbitrary_eval.
-    eapply Hglb.
-    exact H5.
-Qed.
-
-Lemma call_sound fc lf fp :
-  forall f pv P Q R,
-  globalp Q ->
-  localp R ->
-  In (P, Q) (fp f) ->
-  valid fc lf fp ({{(pv_to_assertion fc f pv P) AND R}} CCall f pv {{Q AND R}}).
-Proof.
-  unfold valid, fp_valid, triple_valid.
-  unfold andp.
-  intros.
-  inversion H4; subst.
-  destruct H11 as [loc2 ?].
-  destruct H3.
-  split.
-  - specialize (H2 _ _ _ H1).
-    unfold pv_to_assertion in H1.
-    specialize (H2 _ _ H3 H5).
-    eapply H.
-    exact H2.
-  - eapply H0.
-    exact H6.
-Qed.
-
-Theorem hoare_sound: forall fc lf fp tr,
-  provable fc lf fp tr ->
-  valid fc lf fp tr.
-Proof.
-  intros.
-  induction H.
-  - apply reentry_sound; assumption.
-  - apply call_sound; assumption.
-Admitted.
-(** [] *)
-
-
-Definition reentry_semantic fc lf (st1 st2 : state) : Prop :=
-  match st1, st2 with
-  | (loc1, glb1), (loc2, glb2) =>
-      arbitrary_eval fc lf loc1 glb1 glb2 /\ loc1 = loc2
-  end.
-
-Theorem hoare_complete : forall fc lf fp tr,
-  fp_valid fc lf fp ->
-  valid fc lf fp tr ->
-  provable fc lf fp tr.
-Proof.
-  intros.
-  destruct tr.
-  specialize (H0 H).
-  unfold triple_valid in H0.
-  induction c.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - remember ((fun st => exists st0, P st0 /\ reentry_semantic fc lf st0 st):Assertion) as I.
-    epose proof hoare_consequence _ _ _ _ I _ I _ _ _ _.
-    Unshelve.
-    + exact H1.
-    + unfold derives.
-      intros.
-      subst.
-      exists st.
-      split; [exact H1 |].
-      destruct st as (loc, glb).
-      simpl.
-      split; [constructor | auto].
-    + replace I with ((fun st => True) AND I).
-      eapply hoare_reentry.
-      * unfold localp.
-        intros. exact H1.
-      * unfold globalp.
-        subst. unfold reentry_semantic.
-        intros.
-        destruct H1 as [[loc0 glb0] [? [? ?]]].
-        subst.
-        exists (loc2, glb0). admit.
-      * admit.
-      * unfold andp.
-        admit.
-    + admit.
-Admitted.
-
-
-End Axiomatic.
-
-*)
-
 
 

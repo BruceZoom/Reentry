@@ -108,7 +108,7 @@ Fixpoint param_to_local_state (st : state) (prm_name : list ident) (prm_value : 
 (*   | nil => empty_state *)
   | x :: tx =>
     match prm_value with
-    | nil => empty_state
+    | nil => fst st
     | v :: tv => update_unit_state (param_to_local_state st tx tv) x (aeval st v)
     end
   end.

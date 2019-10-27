@@ -1510,68 +1510,63 @@ Proof.
     apply Operators_Properties.clos_rt_rtn1 in IHceval1.
     apply Operators_Properties.clos_rt_rt1n in IHceval2.
     inversion IHceval1; subst; inversion IHceval2; subst.
-    + inversion H1; subst; inversion H3; subst.
-      * inversion H4; subst.
-        2:{ inversion H5. } clear H4.
-        inversion H2; subst.
-        {
-          apply rt_step, ME_r_pure.
-          eapply E'_Seq.
-          apply com_to_label_pure_valid.
-          apply com_to_label_pure_is_pure.
-          apply com_to_label_pure_is_pure.
-          apply com_to_label_pure_valid.
-          exact H9. exact H13.
-        }
-        {
-          assert (single_point l1).
-          inversion H4; assumption.
-          apply Operators_Properties.clos_rtn1_rt in H2.
-          eapply multi_ceval'_seq_tail in H2.
-          eapply rt_trans.
-          apply H2.
-          pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ ltac: (right; exact H6) (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) (com_to_label_pure_valid _) H9 H13.
-          apply rt_step, ME_r_pure, H7.
-          exact H6.
-        }
-(*         Unshelve.
-        right. exact H6.
+    inversion H1; subst; inversion H3; subst.
+    * inversion H4; subst.
+      2:{ inversion H5. } clear H4.
+      inversion H2; subst.
+      {
+        apply rt_step, ME_r_pure.
+        eapply E'_Seq.
+        apply com_to_label_pure_valid.
         apply com_to_label_pure_is_pure.
         apply com_to_label_pure_is_pure.
-        apply com_to_label_pure_valid. *)
-      * pose proof ceval'_valid_label _ _ _ _ _ _ H9 as [Htmp1 _].
-        pose proof ceval'_valid_label _ _ _ _ _ _ H14 as [_ Htmp2].
-        pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ Htmp1 (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) Htmp2 H9 H14.
-        assert (single_point l2). inversion H3; assumption.
-        apply Operators_Properties.clos_rt1n_rt in H4.
-        inversion H2; subst.
-        {
-          eapply multi_ceval'_seq_head in H4.
-          eapply rt_trans.
-          2:{ exact H4. }
-          apply rt_step, ME_r_single.
-          apply SP_Seq2, H6. apply com_to_label_pure_is_pure.
-          exact H5. exact H6.
-        }
-        assert (single_point l1). inversion H7; assumption.
+        apply com_to_label_pure_valid.
+        exact H9. exact H13.
+      }
+      {
+        assert (single_point l1).
+        inversion H4; assumption.
         apply Operators_Properties.clos_rtn1_rt in H2.
-        eapply multi_ceval'_seq_tail in H2; try assumption.
-        eapply multi_ceval'_seq_head in H4; try assumption.
-        eapply ME_r_single, rt_step in H5.
-        {
-          eapply rt_trans.
-          apply H2.
-          eapply rt_trans.
-          apply H5.
-          apply H4.
-        }
-        {
-          apply SP_Seq2.
-          apply com_to_label_pure_is_pure.
-          assumption.
-        }
-      * pose proof com_to_label_pure_no_point c2.
-        tauto.
+        eapply multi_ceval'_seq_tail in H2.
+        eapply rt_trans.
+        apply H2.
+        pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ ltac: (right; exact H6) (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) (com_to_label_pure_valid _) H9 H13.
+        apply rt_step, ME_r_pure, H7.
+        exact H6.
+      }
+    * pose proof ceval'_valid_label _ _ _ _ _ _ H9 as [Htmp1 _].
+      pose proof ceval'_valid_label _ _ _ _ _ _ H14 as [_ Htmp2].
+      pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ Htmp1 (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) Htmp2 H9 H14.
+      assert (single_point l2). inversion H3; assumption.
+      apply Operators_Properties.clos_rt1n_rt in H4.
+      inversion H2; subst.
+      {
+        eapply multi_ceval'_seq_head in H4.
+        eapply rt_trans.
+        2:{ exact H4. }
+        apply rt_step, ME_r_single.
+        apply SP_Seq2, H6. apply com_to_label_pure_is_pure.
+        exact H5. exact H6.
+      }
+      assert (single_point l1). inversion H7; assumption.
+      apply Operators_Properties.clos_rtn1_rt in H2.
+      eapply multi_ceval'_seq_tail in H2; try assumption.
+      eapply multi_ceval'_seq_head in H4; try assumption.
+      eapply ME_r_single, rt_step in H5.
+      {
+        eapply rt_trans.
+        apply H2.
+        eapply rt_trans.
+        apply H5.
+        apply H4.
+      }
+      {
+        apply SP_Seq2.
+        apply com_to_label_pure_is_pure.
+        assumption.
+      }
+    * pose proof com_to_label_pure_no_point c2.
+      tauto.
   - apply Operators_Properties.clos_rt_rt1n in IHceval.
     inversion IHceval; subst.
     inversion H1; subst.
