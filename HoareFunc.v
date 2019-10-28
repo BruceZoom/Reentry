@@ -811,9 +811,13 @@ Lemma hoare_call_complete: forall fc lf fp f prms P Q,
   provable fc lf fp ({{P}} f [(prms)] {{Q}}).
 Proof.
   intros.
+  pose proof hoare_call.
   remember ((fun (st: state) => exists glb, P (fst st, glb)):Assertion) as R.
   pose proof undo_P2A_existence fc f prms P as [P' ?].
   pose proof ((fun (st: state) => exists loc, Q (loc, snd st)):Assertion) as Q'.
+  (* exists x *)
+  (* P --asgn-- P' *)
+  (* sp(P') |-- Q *)
   apply (hoare_consequence _ _ _ _ (pv_to_assertion fc f prms P' AND R) _ (Q' AND R)).
   - unfold derives, andp.
     intros.
