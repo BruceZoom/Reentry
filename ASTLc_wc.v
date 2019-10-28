@@ -481,6 +481,16 @@ Inductive middle_ceval' : func_context -> list func -> restk -> restk -> Prop :=
         ((c2, Some (l2 :: bstk), (sstk, glb1)) :: stk).
 
 Definition multi_ceval' (fc : func_context) (lf : public_funcs) : restk -> restk -> Prop := clos_refl_trans (middle_ceval' fc lf).
+
+Lemma middle_ceval'_right_single_point :
+  forall fc lf stk1 f bstk l2 st2,
+  middle_ceval' fc lf stk1 ((func_bdy f, Some (bstk ++ l2 :: nil), st2) :: nil) ->
+  single_point l2.
+Proof.
+  intros.
+  inversion H; subst.
+  - 
+Admitted.
 (** [] *)
 
 (** Length Support? *)
@@ -931,10 +941,12 @@ Proof.
         destruct sstk'; [| inversion H4].
         replace (l2 :: nil) with (nil ++ l2 :: nil) in H10; auto.
         replace (loc' :: nil) with (nil ++ loc' :: nil) in H10; auto.
+        (* remove the head *)
         eapply E'_CallOut in H10; auto.
         eapply ME_r_single in H10; [| apply SP_Here].
         apply rt_step in H10.
         eapply rt_trans; [apply H10 |].
+        (* head removed *)
         clear H10 H4 Heqbstk'.
         apply Operators_Properties.clos_rt1n_rt in H1.
         apply Operators_Properties.clos_rt_rtn1 in H1.
@@ -963,12 +975,15 @@ Proof.
           simpl in *.
           remember (rev stk) as sstk''.
           clear dependent stk.
-          
           eapply E'_CallRet in H8.
+          - admit.
+          - inversion H3; subst.
+            + admit.
+            + 
         }
-        - apply ceval'_depth_valid_left in H8.
+        (* - apply ceval'_depth_valid_left in H8.
           rewrite app_length in H8. simpl in H8. omega.
-        - eapply E'_CallRet in H8.
+        - eapply E'_CallRet in H8. *)
       }
       
 
