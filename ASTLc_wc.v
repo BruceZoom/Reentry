@@ -435,45 +435,27 @@ Definition single_point_stack bstk : Prop :=
 Lemma ceval'_single_point_stack_left :
   forall fc c l1 l2 bstk1 bstk2 st1 st2,
   single_point l1 ->
-  ceval' fc c (l2 :: bstk1 ++ l1 :: nil) bstk2 st1 st2 ->
-(*   single_point_stack bstk1. *)
+  ceval' fc c (l1 :: bstk1 ++ l2 :: nil) bstk2 st1 st2 ->
   single_point l2.
 Proof.
-(*   unfold single_point_stack. *)
+(*   unfold single_point_stack.
   intros.
-  assert (nil <> bstk1 ++ l1 :: nil).
-  {
-    unfold not.
-    intros.
-    pose proof eq_refl (length (bstk1 ++ l1 :: nil)).
-    rewrite <- H1 in H2 at 1.
-    rewrite app_length in H2.
-    simpl in H2. omega.
-  }
-  remember (l2 :: bstk1 ++ l1 :: nil) as bstk'.
-  revert dependent l2.
-  induction H0; intros; subst;
-  inversion Heqbstk'; subst;
-  try congruence; try apply SP_Here.
-  - specialize (IHceval'1 l0 eq_refl).
-    apply SP_Seq1; auto.
-  - specialize (IHceval' l0 eq_refl).
-    apply SP_Seq1; auto.
-    apply com_to_label_pure_is_pure.
-  - specialize (IHceval' l0 eq_refl).
-    apply SP_Seq2; auto.
-    apply com_to_label_pure_is_pure.
-  - specialize (IHceval' l0 eq_refl).
-    apply SP_If1; auto.
-    apply com_to_label_pure_is_pure.
-  - specialize (IHceval' l0 eq_refl).
-    apply SP_If2; auto.
-    apply com_to_label_pure_is_pure.
-  - specialize (IHceval' l0 eq_refl).
-    apply SP_While; auto.
-  - specialize (IHceval'1 l0 eq_refl).
-    apply SP_While; auto.
-Qed.
+  inversion H0; subst;
+  try (inversion H1; tauto).
+  - revert dependent sstk.
+    induction bstk; intros.
+    + inversion H1; subst; [auto | inversion H2].
+    + inversion H1; subst.
+      * pose proof ceval'_valid_label_left _ _ _ _ _ _ _ H11 as [? | ?].
+        {
+          admit.
+        }
+        {
+          auto.
+        }
+      * eapply IHbstk.
+        exact H2.
+ *)Admitted.
 (** [] *)
 
 Lemma length_nil_app_cons {A : Type} : forall l a,
@@ -737,8 +719,8 @@ Theorem ceval_multi_ceval' : forall fc lf c loc1 loc2 glb1 glb2,
     single_point lb ->
     length bstk = length sstk ->
     multi_ceval' fc lf
-      ((c, Some (bstk ++ lb :: nil), (sstk ++ loc :: nil, glb1)) :: nil)
-      ((c, Some (bstk ++ lb :: nil), (sstk ++ loc :: nil, glb2)) :: nil).
+      ((c, Some (lb :: bstk), (loc :: sstk, glb1)) :: nil)
+      ((c, Some (lb :: bstk), (loc :: sstk, glb2)) :: nil).
 Proof.
 {
   intros.
@@ -986,6 +968,58 @@ Proof.
     + destruct st2 as [[| loc' sstk'] glb'];
       pose proof H10; apply ceval'_depth_valid_right in H2; inversion H2.
       clear H2.
+      
+      
+      remember (rev bstk2) as bstk'.
+      destruct bstk'.
+      {
+        pose proof rev_involutive bstk2.
+        rewrite <- Heqbstk' in H2.
+        simpl in H2; subst.
+        destruct sstk'; [| inversion H4].
+        replace (l2 :: nil) with (nil ++ l2 :: nil) in H10; auto.
+        replace (loc' :: nil) with (nil ++ loc' :: nil) in H10; auto.
+        eapply E'_CallOut in H10; auto.
+        eapply ME_r_single in H10; [| apply SP_Here].
+        apply rt_step in H10.
+        eapply rt_trans; [apply H10 |].
+        clear H10 H4 Heqbstk'.
+        apply Operators_Properties.clos_rt1n_rt in H1.
+        apply Operators_Properties.clos_rt_rtn1 in H1.
+        inversion H1; subst.
+        inversion H2; subst.
+        remember (rev bstk) as bstk'.
+        destruct bstk'; pose proof rev_involutive bstk;
+        rewrite <- Heqbstk' in H4;
+        simpl in H4; subst; [inversion H8 |].
+        remember (rev bstk') as bstk.
+        clear dependent bstk'.
+        destruct st1 as [sstk'' glb''].
+        remember (rev sstk'') as stk.
+        destruct stk as [| loc stk].
+        {
+          pose proof H8.
+          apply ceval'_depth_valid_left in H4.
+          pose proof rev_involutive sstk''.
+          rewrite <- Heqstk in H5; subst.
+          rewrite app_length in H4.
+          simpl in H4. omega.
+        }
+        {
+          pose proof rev_involutive sstk''.
+          rewrite <- Heqstk in H4; subst.
+          simpl in *.
+          remember (rev stk) as sstk''.
+          clear dependent stk.
+          
+          eapply E'_CallRet in H8.
+        }
+        - apply ceval'_depth_valid_left in H8.
+          rewrite app_length in H8. simpl in H8. omega.
+        - eapply E'_CallRet in H8.
+      }
+      
+
       
 (*       eapply E'_CallOut in H10. *)
       (* call single point *)
