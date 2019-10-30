@@ -116,6 +116,35 @@ Proof.
 Qed.
 (** [] *)
 
+(** Length Support? *)
+Lemma length_nil_app_cons {A : Type} : forall l a,
+  @nil A = l ++ a :: nil -> False.
+Proof.
+  intros.
+  pose proof eq_refl (length (@nil A)).
+  rewrite H in H0 at 1.
+  rewrite app_length in H0.
+  simpl in H0. omega.
+Qed.
+Ltac auto_len :=
+  auto; try (rewrite app_length; auto).
+Ltac app_len_inv H :=
+  rewrite app_length in H; simpl in H; omega.
+Ltac app_cons_nil H :=
+  try (apply eq_sym in H;
+  pose proof length_nil_app_cons _ _ H as Happ_cons_nil;
+  inversion Happ_cons_nil; tauto);
+  try (pose proof length_nil_app_cons _ _ H as Happ_cons_nil;
+  inversion Happ_cons_nil; tauto).
+Ltac destruct_rev stk :=
+  remember (rev stk) as dr_stk' eqn: Heqdr_stk';
+  destruct dr_stk';
+  pose proof rev_involutive stk as dr_H;
+  rewrite <- Heqdr_stk' in dr_H; subst;
+  try (remember (rev dr_stk') as stk;
+  clear dependent dr_stk').
+(** [] *)
+
 
 (** Definition of basic ceval' *)
 (* Calling stacks are ordered top-down, i.e. inner call state at stack top *)
@@ -431,9 +460,13 @@ Proof.
     apply app_inj_tail in Heqbstk1 as [? ?]; subst; auto.
   - inversion Heqbstk1; subst.
     inversion H3; subst.
-    + eapply IHceval'1; [exact H6 | apply eq_refl].
+    + eapply IHceval'1; [exact H6 | auto].
     + apply pure_no_point in H1. congruence.
-  - admit.
+  - inversion Heqbstk1; subst.
+    inversion H2; subst.
+    + eapply IHceval'; [apply H5 | auto].
+    + pose proof com_to_label_pure_no_point c2.
+      congruence.
   - admit.
   - admit.
   - admit.
@@ -451,6 +484,35 @@ Lemma ceval'_single_point_stack_right_b2t :
   ceval' fc c bstk1 (l1 :: bstk ++ l2 :: nil) st1 st2 ->
   single_point l2.
 Proof.
+  intros.
+  remember (l1 :: bstk ++ l2 :: nil) as bstk2.
+  revert dependent bstk.
+  revert dependent l1.
+  induction H0; intros; subst;
+  try (inversion Heqbstk2; subst;
+      try app_cons_nil H2; try app_cons_nil H3).
+  - apply app_inj_tail in H5 as [? ?]; subst; auto.
+  - app_cons_nil H5.
+  - apply app_inj_tail in H7 as [? ?]; subst; auto.
+  - inversion H3; subst.
+    + apply pure_no_point in H0. congruence.
+    + eapply IHceval'2; [apply H7 | auto].
+  - inversion H2; subst.
+    + eapply IHceval'; [apply H5 | auto].
+    + pose proof com_to_label_pure_no_point c2.
+      congruence.
+  - inversion H2; subst.
+    + pose proof com_to_label_pure_no_point c1.
+      congruence.
+    + eapply IHceval'; [apply H6 | auto].
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - eapply IHceval'2; [apply H1 | auto].
 Admitted.
 
 Lemma ceval'_single_point_stack_right_t2b :
@@ -519,18 +581,28 @@ Lemma ceval'_single_point_stack_left_t2b :
   ceval' fc c (l1 :: bstk ++ l2 :: nil) bstk2 st1 st2 ->
   single_point l1.
 Proof.
-Admitted.
-(** [] *)
-
-Lemma length_nil_app_cons {A : Type} : forall l a,
-  @nil A = l ++ a :: nil -> False.
-Proof.
   intros.
-  pose proof eq_refl (length (@nil A)).
-  rewrite H in H0 at 1.
-  rewrite app_length in H0.
-  simpl in H0. omega.
+  remember (l1 :: bstk ++ l2 :: nil) as bstk1.
+  revert dependent bstk.
+  revert dependent l1.
+  induction H0; intros; subst;
+  try (inversion Heqbstk1; subst;
+      try app_cons_nil H2; try app_cons_nil H3;
+      try app_cons_nil H5; try app_cons_nil H6).
+  - apply app_inj_tail in H5 as [? ?]; subst.
+    apply SP_Here.
+  - apply SP_Here.
+  - apply SP_Seq1; auto.
+    eapply IHceval'1; auto.
+  - apply SP_Seq1; [| apply com_to_label_pure_is_pure].
+    eapply IHceval'; auto.
+  - apply SP_Seq2; [apply com_to_label_pure_is_pure | auto].
+  - apply SP_If1; [auto | apply com_to_label_pure_is_pure].
+  - apply SP_If2; [apply com_to_label_pure_is_pure | auto].
+  - apply SP_While; auto.
+  - apply SP_While; auto.
 Qed.
+(** [] *)
 
 (** Bridging basic ceval' to multi_ceval' *)
 Definition restk : Type := list (com * option lbstk * state').
@@ -631,19 +703,6 @@ Proof.
     rewrite app_length in H0.
     simpl in H0. omega.
 Qed.
-(** [] *)
-
-(** Length Support? *)
-Ltac auto_len :=
-  auto; try (rewrite app_length; auto).
-Ltac app_len_inv H :=
-  rewrite app_length in H; simpl in H; omega.
-Ltac app_cons_nil H :=
-  try (apply eq_sym in H;
-  pose proof length_nil_app_cons _ _ H as Happ_cons_nil;
-  inversion Happ_cons_nil; tauto);
-  try (pose proof length_nil_app_cons _ _ H as Happ_cons_nil;
-  inversion Happ_cons_nil; tauto).
 (** [] *)
 
 Lemma middle_ceval'_seq_head_some:
@@ -1049,14 +1108,14 @@ Theorem ceval_multi_ceval' : forall fc lf c loc1 loc2 glb1 glb2,
     multi_ceval' fc lf
       ((c, Some ((com_to_label_pure c) :: nil), ((loc1 :: nil), glb1)) :: nil)
       ((c, None, ((loc2 :: nil), glb2)) :: nil)
-  with arbitrary_eval_multi_ceval' : forall fc lf loc glb1 glb2 bstk sstk,
+  with arbitrary_eval_multi_ceval' : forall fc lf glb1 glb2 bstk sstk,
     arbitrary_eval fc lf glb1 glb2 ->
     forall lb c,
     single_point lb ->
-    length bstk = length sstk ->
+    1 + length bstk = length sstk ->
     multi_ceval' fc lf
-      ((c, Some (lb :: bstk), (loc :: sstk, glb1)) :: nil)
-      ((c, Some (lb :: bstk), (loc :: sstk, glb2)) :: nil).
+      ((c, Some (bstk ++ lb :: nil), (sstk, glb1)) :: nil)
+      ((c, Some (bstk ++ lb :: nil), (sstk, glb2)) :: nil).
 Proof.
 {
   intros.
@@ -1471,14 +1530,16 @@ Proof.
     apply Operators_Properties.clos_rt1n_rt.
     eapply rt1n_trans.
     apply ME_r_single.
-    2:{ apply E'_Reentry1c. }
-    apply SP_Here.
-    apply Operators_Properties.clos_rt_rt1n.
-    replace (LHere :: nil) with (nil ++ LHere :: nil); [| auto].
-    replace (loc2 :: nil) with (nil ++ loc2 :: nil); [| auto].
-    apply arbitrary_eval_multi_ceval'.
-    exact H. apply SP_Here.
-    auto.
+    2:{
+      pose proof E'_Reentry1c fc loc2 glb3.
+      change (LHere :: nil) with (nil ++ LHere :: nil) in H0.
+      apply H0.
+    }
+    + apply SP_Here.
+    + apply Operators_Properties.clos_rt_rt1n.
+      apply arbitrary_eval_multi_ceval'.
+      exact H. apply SP_Here.
+      auto.
 }
 {
   intros.
@@ -1487,14 +1548,12 @@ Proof.
   - apply rt_refl.
   - inversion H2; subst.
     apply ceval_multi_ceval' in H7.
+    simpl in *.
     eapply rt_trans.
     {
       apply rt_step.
-      eapply ME_re.
-      + exact H.
-      + apply eq_refl.
-      + exact H0.
-      + simpl. omega.
+      eapply ME_re; auto.
+      - exact H.
     }
     eapply rt_trans.
     {
