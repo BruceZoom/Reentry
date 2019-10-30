@@ -467,16 +467,28 @@ Proof.
     + eapply IHceval'; [apply H5 | auto].
     + pose proof com_to_label_pure_no_point c2.
       congruence.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-Admitted.
+  - inversion Heqbstk1; subst.
+    inversion H2; subst.
+    + pose proof com_to_label_pure_no_point c1.
+      congruence.
+    + eapply IHceval'; auto; auto.
+  - inversion Heqbstk1; subst.
+    app_cons_nil H6.
+  - inversion Heqbstk1; subst.
+    app_cons_nil H6.
+  - inversion Heqbstk1; subst.
+    eapply IHceval'; auto; auto.
+  - inversion Heqbstk1; subst.
+    eapply IHceval'; auto; auto.
+  - inversion Heqbstk1; subst.
+    app_cons_nil H6.
+  - inversion Heqbstk1; subst.
+    app_cons_nil H5.
+  - inversion Heqbstk1; subst.
+    eapply IHceval'; auto; auto.
+  - inversion Heqbstk1; subst.
+    eapply IHceval'1; auto; auto.
+Qed.
 
 Lemma ceval'_single_point_stack_right_b2t :
   forall fc c l1 l2 bstk bstk1 st1 st2,
@@ -505,15 +517,27 @@ Proof.
     + pose proof com_to_label_pure_no_point c1.
       congruence.
     + eapply IHceval'; [apply H6 | auto].
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - eapply IHceval'2; [apply H1 | auto].
-Admitted.
+  - inversion H3; subst.
+    + eapply IHceval'; auto; auto.
+    + pose proof com_to_label_pure_no_point c2.
+      congruence.
+  - inversion H3; subst.
+    + pose proof com_to_label_pure_no_point c1.
+      congruence.
+    + eapply IHceval'; auto; auto.
+  - inversion H2; subst.
+    + eapply IHceval'; auto; auto.
+    + pose proof com_to_label_pure_no_point c2.
+      congruence.
+  - inversion H2; subst.
+    + pose proof com_to_label_pure_no_point c1.
+      congruence.
+    + eapply IHceval'; auto; auto.
+  - eapply IHceval'; auto; auto.
+  - eapply IHceval'2; auto; auto.
+  - eapply IHceval'; auto; auto.
+  - eapply IHceval'2; auto; auto.
+Qed.
 
 Lemma ceval'_single_point_stack_right_t2b :
   forall fc c l1 l2 bstk bstk1 st1 st2,
@@ -601,6 +625,34 @@ Proof.
   - apply SP_If2; [apply com_to_label_pure_is_pure | auto].
   - apply SP_While; auto.
   - apply SP_While; auto.
+Qed.
+
+Lemma ceval'_single_point_stack_right_tb :
+  forall fc c l1 l2 bstk bstk1 st1 st2,
+  ceval' fc c bstk1 (l1 :: bstk ++ l2 :: nil) st1 st2 ->
+  single_point l1 <-> single_point l2.
+Proof.
+  split; intros.
+  - eapply ceval'_single_point_stack_right_b2t.
+    + apply H0.
+    + apply H.
+  - eapply ceval'_single_point_stack_right_t2b.
+    + apply H0.
+    + apply H.
+Qed.
+
+Lemma ceval'_single_point_stack_left_tb :
+  forall fc c l1 l2 bstk bstk2 st1 st2,
+  ceval' fc c (l1 :: bstk ++ l2 :: nil) bstk2 st1 st2 ->
+  single_point l1 <-> single_point l2.
+Proof.
+  split; intros.
+  - eapply ceval'_single_point_stack_left_b2t.
+    + apply H0.
+    + apply H.
+  - eapply ceval'_single_point_stack_left_t2b.
+    + apply H0.
+    + apply H.
 Qed.
 (** [] *)
 
