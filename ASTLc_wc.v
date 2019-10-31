@@ -1347,65 +1347,95 @@ Proof.
         inversion H6; subst.
         pose proof com_to_label_pure_no_point c2.
         tauto.
-  - (* subst.
+  - subst.
     specialize (IHceval glb2 glb1 loc2 eq_refl loc1 eq_refl).
     apply Operators_Properties.clos_rt_rt1n in IHceval.
     inversion IHceval; subst.
     inversion H1; subst.
     + inversion H2; subst; [| inversion H3].
-      eapply E'_IfTrue, ME_r_pure, rt_step in H10; auto.
-      * exact H10.
-      * apply com_to_label_pure_is_pure.
-      * apply com_to_label_pure_valid.
-      * auto.
+      eapply (E'_IfTrue _ b), ME_r_pure, rt_step in H10;
+      [| apply com_to_label_pure_is_pure | apply com_to_label_pure_valid | auto].
+      apply H10.
     + apply Operators_Properties.clos_rt1n_rt in H2.
-      eapply multi_ceval'_if_branch in H2.
-      eapply rt_trans.
-      2:{ exact H2. }
-      apply rt_step, ME_r_single; auto.
-      * apply SP_If1; [exact H10 | apply com_to_label_pure_is_pure].
-      * pose proof H11 as Htmp.
-        destruct st2 as [[| loc' sstk'] glb'];
-        apply ceval'_depth_valid_right in Htmp; [inversion Htmp |].
+      destruct bstk2 as [| l' bstk2].
+      {
+        eapply multi_ceval'_if_branch in H2; auto.
+        eapply rt_trans; [| apply H2].
+        change (LIf b l2 (com_to_label_pure c2) :: nil) with (nil ++ LIf b l2 (com_to_label_pure c2) :: nil).
+        apply rt_step, ME_r_single; auto.
+        + apply SP_If1; auto.
+          apply com_to_label_pure_is_pure.
+        + apply E'_IfTrue; auto.
+          * apply com_to_label_pure_is_pure.
+          * right; auto.
+      }
+      {
+        pose proof H11.
+        apply ceval'_single_point_stack_right_t2b in H3; auto.
+        eapply multi_ceval'_if_branch in H2; auto.
+        change ((fix app (l m : list label) {struct l} : list label :=
+                 match l with
+                 | nil => m
+                 | a :: l1 => a :: app l1 m
+                 end) bstk2 (l2 :: nil)) with (bstk2 ++ l2 :: nil) in H2.
+        eapply rt_trans; [| apply H2].
+        rewrite app_comm_cons.
+        apply rt_step, ME_r_single; auto.
         apply E'_IfTrue; auto.
-        ++ apply com_to_label_pure_is_pure.
-        ++ right. exact H10.
-      * exact H10.
-    + pose proof com_to_label_pure_no_point c1.
-      congruence. *)
-    admit.
-  - (* subst.
+        + apply com_to_label_pure_is_pure.
+        + right; auto.
+      }
+    + change (com_to_label_pure c1 :: nil) with (nil ++ com_to_label_pure c1 :: nil) in H4.
+      apply app_inj_tail in H4 as [? ?]; subst.
+      pose proof com_to_label_pure_no_point c1.
+      congruence.
+  - subst.
     specialize (IHceval glb2 glb1 loc2 eq_refl loc1 eq_refl).
     apply Operators_Properties.clos_rt_rt1n in IHceval.
     inversion IHceval; subst.
     inversion H1; subst.
     + inversion H2; subst; [| inversion H3].
-      eapply E'_IfFalse, ME_r_pure, rt_step in H10; auto.
-      * exact H10.
-      * apply com_to_label_pure_is_pure.
-      * apply com_to_label_pure_valid.
-      * auto.
+      eapply (E'_IfFalse _ b), ME_r_pure, rt_step in H10;
+      [| apply com_to_label_pure_is_pure | apply com_to_label_pure_valid | auto].
+      apply H10.
     + apply Operators_Properties.clos_rt1n_rt in H2.
-      eapply multi_ceval'_else_branch in H2.
-      eapply rt_trans.
-      2:{ exact H2. }
-      apply rt_step, ME_r_single; auto.
-      * apply SP_If2; [apply com_to_label_pure_is_pure | exact H10].
-      * pose proof H11 as Htmp.
-        destruct st2 as [[| loc' sstk'] glb'];
-        apply ceval'_depth_valid_right in Htmp; [inversion Htmp |].
+      destruct bstk2 as [| l' bstk2].
+      {
+        eapply multi_ceval'_else_branch in H2; auto.
+        eapply rt_trans; [| apply H2].
+        change (LIf b (com_to_label_pure c1) l2 :: nil) with (nil ++ LIf b (com_to_label_pure c1) l2 :: nil).
+        apply rt_step, ME_r_single; auto.
+        + apply SP_If2; auto.
+          apply com_to_label_pure_is_pure.
+        + apply E'_IfFalse; auto.
+          * apply com_to_label_pure_is_pure.
+          * right; auto.
+      }
+      {
+        pose proof H11.
+        apply ceval'_single_point_stack_right_t2b in H3; auto.
+        eapply multi_ceval'_else_branch in H2; auto.
+        change ((fix app (l m : list label) {struct l} : list label :=
+                 match l with
+                 | nil => m
+                 | a :: l1 => a :: app l1 m
+                 end) bstk2 (l2 :: nil)) with (bstk2 ++ l2 :: nil) in H2.
+        eapply rt_trans; [| apply H2].
+        rewrite app_comm_cons.
+        apply rt_step, ME_r_single; auto.
         apply E'_IfFalse; auto.
-        ++ apply com_to_label_pure_is_pure.
-        ++ right. exact H10.
-      * exact H10.
-    + pose proof com_to_label_pure_no_point c2.
-      congruence. *)
-    admit.
+        + apply com_to_label_pure_is_pure.
+        + right; auto.
+      }
+    + change (com_to_label_pure c2 :: nil) with (nil ++ com_to_label_pure c2 :: nil) in H4.
+      apply app_inj_tail in H4 as [? ?]; subst.
+      pose proof com_to_label_pure_no_point c2.
+      congruence.
   - subst.
     inversion Heqst1; subst.
     apply rt_step, ME_r_pure, E'_WhileFalse.
     exact H.
-  - (* subst.
+  - subst.
     destruct st2 as [loc3 glb3].
     specialize (IHceval1 glb3 glb1 loc3 eq_refl loc1 eq_refl).
     specialize (IHceval2 glb2 glb3 loc2 eq_refl loc3 eq_refl).
@@ -1414,68 +1444,87 @@ Proof.
     apply Operators_Properties.clos_rt_rt1n in IHceval2.
     inversion IHceval1; inversion IHceval2; subst.
     inversion H2; inversion H5; subst.
-    + inversion H6; subst.
-      2:{ inversion H4. }
+    + inversion H6; subst; [| inversion H4].
       inversion H3; subst.
       {
-        assert (1 + @length label nil = length (loc2 :: nil)) as Htmp; auto.
-        pose proof E'_WhileTrue2 _ _ _ _ _ _ _ _ _ _ _ ltac: (apply IP_While, com_to_label_pure_is_pure) (com_to_label_pure_valid _) Htmp H H10 H20.
-        eapply rt_step, ME_r_pure, H4.
+        eapply rt_step, ME_r_pure.
+        eapply E'_WhileTrue2; auto.
+        * apply IP_While. apply com_to_label_pure_is_pure.
+        * apply com_to_label_pure_valid.
+        * apply H10.
+        * apply H20.
       }
       {
-        destruct bstk as [| l1 bstk]; [inversion H4 |].
-        assert (single_point l1); [inversion H4; assumption |].
+        destruct bstk as [| l1 bstk]; [inversion H10 |].
+        assert (single_point l1).
+        {
+          eapply middle_ceval'_right_single_point_bottom.
+          + exact H10.
+          + exact H4.
+        }
         eapply Operators_Properties.clos_rtn1_rt, multi_ceval'_while_loop in H3; try assumption; [| exact H].
         eapply rt_trans; [apply H3 |].
         apply rt_step, ME_r_pure.
         destruct st1 as [sstk' glb'].
         eapply E'_WhileSeg2; auto.
         * apply com_to_label_pure_valid.
-        * apply ceval'_depth_valid_left in H10.
-          auto.
         * exact H10.
         * exact H20.
       }
     + apply Operators_Properties.clos_rt1n_rt in H6.
       inversion H3; subst.
       {
-        eapply rt_trans.
-        2:{ exact H6. }
+        eapply rt_trans; [| exact H6].
         apply rt_step, ME_r_single; auto.
         destruct st3 as [sstk' glb'].
-        eapply E'_WhileTrue2; auto.
-        * apply IP_While, com_to_label_pure_is_pure.
-        * right; auto.
-        * apply ceval'_depth_valid_right in H21.
-          auto.
-        * exact H10.
-        * exact H21.
+        destruct bstk2 as [| l' bstk2].
+        + eapply E'_WhileTrue2; auto.
+          * apply IP_While, com_to_label_pure_is_pure.
+          * right; auto.
+          * exact H10.
+          * exact H21.
+        + pose proof H21.
+          apply ceval'_single_point_stack_right_t2b in H4; auto.
+          eapply E'_WhileTrue2; auto.
+          * apply IP_While, com_to_label_pure_is_pure.
+          * right; auto.
+          * exact H10.
+          * exact H21.
       }
       {
-        apply Operators_Properties.clos_rtn1_rt in H3.
         destruct bstk as [| l1 bstk]; [inversion H10 |].
+        apply Operators_Properties.clos_rtn1_rt in H3.
         eapply multi_ceval'_while_loop in H3; [| exact H].
         eapply rt_trans; [exact H3 |].
         eapply rt_trans; [| exact H6].
-        inversion H5; subst.
         apply rt_step, ME_r_single; auto.
         destruct st1 as [sstk' glb'].
         destruct st3 as [sstk'' glb''].
-        eapply E'_WhileSeg2.
-        + inversion H4; assumption.
-        + right; assumption.
-        + apply ceval'_depth_valid_left in H10. auto.
-        + apply ceval'_depth_valid_right in H19. auto.
-        + exact H10.
-        + exact H21.
+        assert (single_point l1).
+        {
+          eapply middle_ceval'_right_single_point_bottom.
+          + exact H10.
+          + exact H4.
+        }
+        destruct bstk2 as [| l' bstk2].
+        + eapply E'_WhileSeg2; auto.
+          * right; auto.
+          * exact H10.
+          * auto.
+        + pose proof H21.
+          apply ceval'_single_point_stack_right_t2b in H9; auto.
+          eapply E'_WhileSeg2; auto.
+          * right; auto.
+          * exact H10.
+          * auto.
       }
-    + inversion H24.
+    + change (LWhile b (com_to_label_pure c) :: nil) with (nil ++ LWhile b (com_to_label_pure c) :: nil) in H14.
+      apply app_inj_tail in H14 as [? ?]; subst.
       pose proof com_to_label_pure_no_point c.
-      congruence. *)
-    admit.
+      inversion H23; subst.
+      congruence.
   - inversion Heqst1; inversion Heqst2; subst; clear Heqst2 Heqst1.
     specialize (IHceval glb0 glb3 loc2 eq_refl (param_to_local_state (loc0, glb3) (func_arg f) pv) eq_refl).
-    
     apply Operators_Properties.clos_rt_rt1n in IHceval.
     inversion IHceval; subst.
     inversion H0; subst.
@@ -1520,7 +1569,6 @@ Proof.
       eapply ME_r_single, rt_step in H10; auto.
       eapply rt_trans; [apply H10 |].
       (* call head adjusted *)
-      
       (* call tail *)
       apply Operators_Properties.clos_rt1n_rt in H1.
       apply Operators_Properties.clos_rt_rtn1 in H1.
@@ -1621,5 +1669,4 @@ Proof.
     }
     exact IHarbitrary_eval.
 }
-Admitted.
-
+Qed.
