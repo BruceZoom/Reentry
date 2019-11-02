@@ -368,7 +368,30 @@ Proof.
     + split; [left; apply IP_Seq | right; apply SP_Seq2]; auto.
     + split; [right; apply SP_Seq1 | left; apply IP_Seq]; auto.
     + split; right; [apply SP_Seq1 | apply SP_Seq2]; auto.
-Admitted.
+  - destruct H8.
+    + split; [left; apply IP_Seq | right; apply SP_Seq1]; auto.
+    + split; right; apply SP_Seq1; auto.
+  - destruct H11.
+    + split; [right; apply SP_Seq2 | left; apply IP_Seq ]; auto.
+    + split; right; apply SP_Seq2; auto.
+  - destruct H9.
+    + split; left; apply IP_If; auto.
+    + split; [left; apply IP_If | right; apply SP_If1]; auto.
+  - destruct H9.
+    + split; left; apply IP_If; auto.
+    + split; [left; apply IP_If | right; apply SP_If2]; auto.
+  - destruct H11.
+    + split; [right; apply SP_If1 | left; apply IP_If]; auto.
+    + split; right; apply SP_If1; auto.
+  - destruct H11.
+    + split; [right; apply SP_If2 | left; apply IP_If]; auto.
+    + split; right; apply SP_If2; auto.
+  - split; left; apply IP_While; auto.
+  - split; [left; apply IP_While | right; apply SP_While]; auto.
+  - split; [left |]; auto.
+  - split; right; apply SP_While; auto.
+  - split; [right; apply SP_While |]; auto.
+Qed.
 
 Corollary ceval'_valid_label_left :
   forall fc c l1 bstk1 bstk2 st1 st2,
@@ -397,16 +420,33 @@ Lemma ceval'_depth_valid : forall fc c bstk1 bstk2 sstk1 sstk2 glb1 glb2,
   length bstk1 = length sstk1 /\ length bstk2 = length sstk2.
 Proof.
   intros.
-  remember c as c'.
-  inversion H; subst; auto.
-  - simpl. repeat rewrite app_length.
-    rewrite H9. auto.
-  - simpl. repeat rewrite app_length.
-    rewrite H9. auto.
-  - simpl. repeat rewrite app_length.
-    rewrite <- H10, <- H11.
-    simpl. omega.
-Admitted.
+  remember (sstk1, glb1) as st1.
+  remember (sstk2, glb2) as st2.
+  revert dependent glb2. revert sstk2.
+  revert dependent glb1. revert sstk1.
+  induction H; intros; subst;
+  try inversion Heqst1; try inversion Heqst2; subst; auto;
+  try (specialize (IHceval' sstk1 glb1 eq_refl sstk2 glb2 eq_refl) as [? ?]; auto);
+  try (specialize (IHceval' (loc1 :: nil) glb0 eq_refl sstk2 glb2 eq_refl) as [? ?]; auto).
+  - specialize (IHceval' (param_to_local_state (loc1, glb0) (func_arg f) pv :: nil) glb0 eq_refl (sstk ++ loc2 :: nil) glb3 eq_refl) as [? ?].
+    simpl in *. repeat rewrite app_length in *. auto.
+  - specialize (IHceval' (sstk ++ loc1 :: nil) glb0 eq_refl (loc2 :: nil) glb3 eq_refl) as [? ?].
+    simpl in *. repeat rewrite app_length in *. auto.
+  - specialize (IHceval' sstk1 glb0 eq_refl sstk2 glb3 eq_refl) as [? ?].
+    simpl in *. repeat rewrite app_length in *. auto.
+  - destruct st as [sstk' glb'].
+    specialize (IHceval'1 sstk1 glb1 eq_refl sstk' glb' eq_refl) as [? _].
+    specialize (IHceval'2 sstk' glb' eq_refl sstk2 glb2 eq_refl) as [_ ?].
+    simpl in *. auto.
+  - destruct st1 as [sstk' glb'].
+    specialize (IHceval'1 (loc1 :: nil) glb0 eq_refl sstk' glb' eq_refl) as [? _].
+    specialize (IHceval'2 sstk' glb' eq_refl sstk2 glb2 eq_refl) as [_ ?].
+    auto.
+  - destruct st3 as [sstk' glb'].
+    specialize (IHceval'1 sstk1 glb1 eq_refl sstk' glb' eq_refl) as [? _].
+    specialize (IHceval'2 sstk' glb' eq_refl sstk2 glb2 eq_refl) as [_ ?].
+    auto.
+Qed.
 
 Corollary ceval'_depth_valid_left : forall fc c bstk1 bstk2 sstk1 glb1 st2,
   ceval' fc c bstk1 bstk2 (sstk1, glb1) st2 ->
