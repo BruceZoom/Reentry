@@ -1010,7 +1010,125 @@ Lemma multi_ceval'_seq_tail:
       ((CSeq c1 c2, Some ((LSeq l1 (com_to_label_pure c2)) :: bstk), st0) :: nil).
 Proof.
   intros.
-Admitted.
+  set (stk := @nil (com * option lbstk * state')).
+  unfold stk.
+  change ((c1, Some (l1 :: bstk), st0) :: nil) with (stk ++ (c1, Some (l1 :: bstk), st0) :: nil) in H0.
+  change ((c1;; c2, Some (LSeq l1 (com_to_label_pure c2) :: bstk), st0) :: nil) with (stk ++ (c1;; c2, Some (LSeq l1 (com_to_label_pure c2) :: bstk), st0) :: nil).
+  clearbody stk.
+  remember (stk ++ (c1, Some (l1 :: bstk), st0) :: nil) as l.
+  remember ((c1, Some (com_to_label_pure c1 :: nil), st1) :: nil) as l'.
+  apply Operators_Properties.clos_rt_rtn1 in H0.
+  revert Heql.
+  revert stk bstk st0.
+  revert c2.
+  generalize dependent l1.
+  induction H0; intros; subst.
+  - destruct stk; inversion Heql; subst; simpl in *; [| app_cons_nil H2].
+    apply rt_refl.
+  - inversion H; subst.
+    + destruct stk.
+      * inversion H2; subst.
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_n1 l1 H1 c2 ((c, Some bstk0, st2) :: stk) bstk st0 eq_refl.
+        eapply rt_trans; [apply H3 |].
+        eapply rt_step, ME_r_pure; auto.
+    + destruct bstk1; [inversion H7 |].
+      inversion H0; subst.
+      {
+        change ((c, Some (bstk2 ++ l2 :: nil), st3) :: nil) with (nil ++ (c, Some (bstk2 ++ l2 :: nil), st3) :: nil) in H2.
+        apply app_inj_tail in H2 as [? ?]; subst.
+        inversion H4; subst.
+        rewrite H5 in H7.
+        destruct_rev bstk.
+        + simpl in *.
+          change (LSeq l1 (com_to_label_pure c2) :: nil) with (nil ++ LSeq l1 (com_to_label_pure c2) :: nil).
+          apply rt_step, ME_r_single.
+          * apply SP_Seq1; auto.
+            apply com_to_label_pure_is_pure.
+          * eapply E'_Seq1; auto.
+            apply com_to_label_pure_valid.
+        + simpl in *.
+          inversion H4; subst.
+          rewrite app_comm_cons in H6.
+          apply app_inj_tail in H6 as [? ?]; subst.
+          rewrite app_comm_cons.
+          apply rt_step, ME_r_single; auto.
+          eapply E'_Seq1; auto.
+          apply com_to_label_pure_valid.
+      }
+      {
+        destruct stk.
+        + inversion H2; subst.
+          eapply middle_ceval'_right_single_point_bottom in H4; [| apply H7].
+          destruct bstk2.
+          * inversion H9; subst.
+            pose proof IHclos_refl_trans_n1 l H4 c2 nil bstk1 st2 eq_refl.
+            eapply rt_trans; [apply H6 |].
+            change (LSeq l1 (com_to_label_pure c2) :: nil) with (nil ++ LSeq l1 (com_to_label_pure c2) :: nil).
+            apply rt_step, ME_r_single; auto; [apply SP_Seq1; [auto | apply com_to_label_pure_is_pure] |].
+            apply E'_Seq1; auto.
+            right; auto.
+          * inversion H9; subst.
+            pose proof IHclos_refl_trans_n1 l H4 c2 nil bstk1 st2 eq_refl.
+            eapply rt_trans; [apply H6 |].
+            rewrite app_comm_cons.
+            apply rt_step, ME_r_single; auto.
+            eapply E'_Seq1; auto.
+            right; auto.
+        + inversion H2; subst.
+          pose proof IHclos_refl_trans_n1 l1 H1 c2 ((c, Some (l :: bstk1), st2) :: stk) bstk st0 eq_refl.
+          eapply rt_trans; [apply H6 |].
+          apply rt_step, ME_r_single; auto.
+      }
+    + destruct stk; [inversion H2 |].
+      inversion H2; subst.
+      destruct stk.
+      * inversion H7; subst.
+        destruct bstk0.
+        {
+          inversion H8; subst.
+          pose proof IHclos_refl_trans_n1 l1 H1 c2 nil nil (sstk, glb) eq_refl.
+          eapply rt_trans; [apply H4 |].
+          change (LSeq l1 (com_to_label_pure c2) :: nil) with (nil ++ LSeq l1 (com_to_label_pure c2) :: nil).
+          eapply rt_step, ME_re; auto; auto.
+          apply SP_Seq1; auto.
+          apply com_to_label_pure_is_pure.
+        }
+        {
+          inversion H8; subst.
+          pose proof IHclos_refl_trans_n1 l1 H1 c2 nil (bstk0 ++ l0 :: nil) (sstk, glb) eq_refl.
+          eapply rt_trans; [apply H4 |].
+          rewrite app_comm_cons.
+          eapply rt_step, ME_re; auto; auto.
+        }
+      * inversion H7; subst.
+        pose proof IHclos_refl_trans_n1 l1 H1 c2 ((c0, Some (bstk0 ++ l0 :: nil), (sstk, glb)) :: stk) bstk st0 eq_refl.
+        eapply rt_trans; [apply H4 |].
+        eapply rt_step, ME_re; auto; auto.
+    + destruct stk.
+      * inversion H2; subst.
+        destruct bstk0.
+        {
+          inversion H6; subst.
+          pose proof IHclos_refl_trans_n1 l1 H1 c2 ((c0, None, (loc :: nil, glb1)) :: nil) nil (sstk, glb2) eq_refl.
+          eapply rt_trans; [apply H4 |].
+          change (LSeq l1 (com_to_label_pure c2) :: nil) with (nil ++ LSeq l1 (com_to_label_pure c2) :: nil).
+          eapply rt_step, ME_ex; auto.
+          apply SP_Seq1; auto.
+          apply com_to_label_pure_is_pure.
+        }
+        {
+          inversion H6; subst.
+          pose proof IHclos_refl_trans_n1 l1 H1 c2 ((c0, None, (loc :: nil, glb1)) :: nil) (bstk0 ++ l2 :: nil) (sstk, glb2) eq_refl.
+          eapply rt_trans; [apply H4 |].
+          rewrite app_comm_cons.
+          eapply rt_step, ME_ex; auto.
+        }
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_n1 l1 H1 c2 ((c0, None, (loc :: nil, glb1)) :: (c3, Some (bstk0 ++ l2 :: nil), (sstk, glb2)) :: stk) bstk st0 eq_refl.
+        eapply rt_trans; [apply H4 |].
+        eapply rt_step, ME_ex; auto.
+Qed.
 
 Lemma multi_ceval'_if_branch:
   forall fc lf b c1 c2 l1 st3 st2 bstk,
@@ -1023,7 +1141,108 @@ Lemma multi_ceval'_if_branch:
     ((CIf b c1 c2, None, st2) :: nil).
 Proof.
   intros.
-Admitted.
+  set (stk := @nil (com * option lbstk * state')).
+  unfold stk.
+  change ((c1, Some (l1 :: bstk), st3) :: nil) with (stk ++ (c1, Some (l1 :: bstk), st3) :: nil) in H0.
+  change ((If b Then c1 Else c2 EndIf, Some (LIf b l1 (com_to_label_pure c2) :: bstk), st3) :: nil) with (stk ++ (If b Then c1 Else c2 EndIf, Some (LIf b l1 (com_to_label_pure c2) :: bstk), st3) :: nil).
+  clearbody stk.
+  remember (stk ++ (c1, Some (l1 :: bstk), st3) :: nil) as l.
+  remember ((c1, None, st2) :: nil) as l'.
+  apply Operators_Properties.clos_rt_rt1n in H0.
+  revert Heql.
+  revert stk bstk st3.
+  revert c2.
+  generalize dependent l1.
+  induction H0; intros; subst.
+  - destruct stk; inversion Heql; subst.
+    app_cons_nil H2.
+  - specialize (IHclos_refl_trans_1n eq_refl).
+    inversion H; subst.
+    + destruct stk.
+      * inversion H2; subst.
+        inversion H0; subst; [| inversion H3].
+        apply rt_step, ME_r_pure.
+        apply E'_If1; auto.
+        left. apply com_to_label_pure_is_pure.
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c2 ((c, None, st0) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H3].
+        apply rt_step, ME_r_pure; auto.
+    + destruct stk.
+      * inversion H2; subst.
+        destruct bstk2.
+        {
+          pose proof IHclos_refl_trans_1n l2 H3 c2 nil nil st0 eq_refl.
+          eapply rt_trans; [| apply H4].
+          change (LIf b l2 (com_to_label_pure c2) :: nil) with (nil ++ LIf b l2 (com_to_label_pure c2) :: nil).
+          apply rt_step, ME_r_single; auto.
+          + apply SP_If1; auto.
+            apply com_to_label_pure_is_pure.
+          + apply E'_If1; auto.
+            right; auto.
+        }
+        {
+          pose proof H6.
+          apply ceval'_single_point_stack_right_t2b in H4; auto.
+          pose proof IHclos_refl_trans_1n l H4 c2 nil (bstk2 ++ l2 :: nil) st0 eq_refl.
+          eapply rt_trans; [| apply H5].
+          rewrite app_comm_cons.
+          apply rt_step, ME_r_single; auto.
+          apply E'_If1; auto.
+          right; auto.
+        }
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c2 ((c, Some (bstk2 ++ l2 :: nil), st0) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H4].
+        apply rt_step, ME_r_single; auto.
+    + destruct stk.
+      * inversion H2; subst.
+        destruct bstk0.
+        {
+          inversion H7; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c2 ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: nil) nil (sstk, glb) eq_refl.
+          eapply rt_trans; [| apply H4].
+          change (LIf b l1 (com_to_label_pure c2) :: nil) with (nil ++ LIf b l1 (com_to_label_pure c2) :: nil).
+          eapply rt_step, ME_re; auto; auto.
+          apply SP_If1; auto.
+          apply com_to_label_pure_is_pure.
+        }
+        {
+          inversion H7; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c2 ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: nil) (bstk0 ++ l0 :: nil) (sstk, glb) eq_refl.
+          eapply rt_trans; [| apply H4].
+          rewrite app_comm_cons.
+          eapply rt_step, ME_re; auto; auto.
+        }
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c2 ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: (c0, Some (bstk0 ++ l0 :: nil), (sstk, glb)) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H4].
+        eapply rt_step, ME_re; auto; auto.
+    + destruct stk; inversion H2; subst.
+      destruct stk.
+      * inversion H7; subst.
+        destruct bstk0.
+        {
+          inversion H8; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c2 nil nil (sstk, glb1) eq_refl.
+          eapply rt_trans; [| apply H4].
+          change (LIf b l1 (com_to_label_pure c2) :: nil) with (nil ++ LIf b l1 (com_to_label_pure c2) :: nil).
+          eapply rt_step, ME_ex; auto.
+          apply SP_If1; auto.
+          apply com_to_label_pure_is_pure.
+        }
+        {
+          inversion H8; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c2 nil (bstk0 ++ l2 :: nil) (sstk, glb1) eq_refl.
+          eapply rt_trans; [| apply H4].
+          rewrite app_comm_cons.
+          eapply rt_step, ME_ex; auto.
+        }
+      * inversion H7; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c2 ((c3, Some (bstk0 ++ l2 :: nil), (sstk, glb1)) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H4].
+        eapply rt_step, ME_ex; auto.
+Qed.
 
 Lemma multi_ceval'_else_branch:
   forall fc lf b c1 c2 l1 st3 st2 bstk,
@@ -1036,11 +1255,115 @@ Lemma multi_ceval'_else_branch:
     ((CIf b c1 c2, None, st2) :: nil).
 Proof.
   intros.
-Admitted.
+  set (stk := @nil (com * option lbstk * state')).
+  unfold stk.
+  change ((c2, Some (l1 :: bstk), st3) :: nil) with (stk ++ (c2, Some (l1 :: bstk), st3) :: nil) in H0.
+  change ((If b Then c1 Else c2 EndIf, Some (LIf b (com_to_label_pure c1) l1 :: bstk), st3) :: nil) with (stk ++ (If b Then c1 Else c2 EndIf, Some (LIf b (com_to_label_pure c1) l1 :: bstk), st3) :: nil).
+  clearbody stk.
+  remember (stk ++ (c2, Some (l1 :: bstk), st3) :: nil) as l.
+  remember ((c2, None, st2) :: nil) as l'.
+  apply Operators_Properties.clos_rt_rt1n in H0.
+  revert Heql.
+  revert stk bstk st3.
+  revert c1.
+  generalize dependent l1.
+  induction H0; intros; subst.
+  - destruct stk.
+    + inversion Heql.
+    + inversion Heql.
+      app_cons_nil H2.
+  - specialize (IHclos_refl_trans_1n eq_refl).
+    inversion H; subst.
+    + destruct stk.
+      * inversion H2; subst.
+        inversion H0; subst; [| inversion H3].
+        apply rt_step, ME_r_pure.
+        apply E'_If2; auto.
+        apply com_to_label_pure_valid.
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c1 ((c, None, st0) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H3].
+        apply rt_step, ME_r_pure; auto.
+    + destruct stk.
+      * inversion H2; subst.
+        destruct bstk2.
+        {
+          pose proof IHclos_refl_trans_1n l2 H3 c1 nil nil st0 eq_refl.
+          eapply rt_trans; [| apply H4].
+          change (LIf b (com_to_label_pure c1) l2 :: nil) with (nil ++ LIf b (com_to_label_pure c1) l2 :: nil).
+          apply rt_step, ME_r_single; auto.
+          + apply SP_If2; auto.
+            apply com_to_label_pure_is_pure.
+          + apply E'_If2; auto.
+            right; auto.
+        }
+        {
+          pose proof H6.
+          apply ceval'_single_point_stack_right_t2b in H4; auto.
+          pose proof IHclos_refl_trans_1n l H4 c1 nil (bstk2 ++ l2 :: nil) st0 eq_refl.
+          eapply rt_trans; [| apply H5].
+          rewrite app_comm_cons.
+          apply rt_step, ME_r_single; auto.
+          apply E'_If2; auto.
+          right; auto.
+        }
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c1 ((c, Some (bstk2 ++ l2 :: nil), st0) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H4].
+        apply rt_step, ME_r_single; auto.
+    + destruct stk.
+      * inversion H2; subst.
+        destruct bstk0.
+        {
+          inversion H7; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c1 ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: nil) nil (sstk, glb) eq_refl.
+          eapply rt_trans; [| apply H4].
+          change (LIf b (com_to_label_pure c1) l1 :: nil) with (nil ++ LIf b (com_to_label_pure c1) l1 :: nil).
+          eapply rt_step, ME_re; auto; auto.
+          apply SP_If2; auto.
+          apply com_to_label_pure_is_pure.
+        }
+        {
+          inversion H7; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c1 ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: nil) (bstk0 ++ l0 :: nil) (sstk, glb) eq_refl.
+          eapply rt_trans; [| apply H4].
+          rewrite app_comm_cons.
+          eapply rt_step, ME_re; auto; auto.
+        }
+      * inversion H2; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c1 ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: (c0, Some (bstk0 ++ l0 :: nil), (sstk, glb)) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H4].
+        eapply rt_step, ME_re; auto; auto.
+    + destruct stk; inversion H2; subst.
+      destruct stk.
+      * inversion H7; subst.
+        destruct bstk0.
+        {
+          inversion H8; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c1 nil nil (sstk, glb1) eq_refl.
+          eapply rt_trans; [| apply H4].
+          change (LIf b (com_to_label_pure c1) l1 :: nil) with (nil ++ LIf b (com_to_label_pure c1) l1 :: nil).
+          eapply rt_step, ME_ex; auto.
+          apply SP_If2; auto.
+          apply com_to_label_pure_is_pure.
+        }
+        {
+          inversion H8; subst.
+          pose proof IHclos_refl_trans_1n l1 H1 c1 nil (bstk0 ++ l2 :: nil) (sstk, glb1) eq_refl.
+          eapply rt_trans; [| apply H4].
+          rewrite app_comm_cons.
+          eapply rt_step, ME_ex; auto.
+        }
+      * inversion H7; subst.
+        pose proof IHclos_refl_trans_1n l1 H1 c1 ((c3, Some (bstk0 ++ l2 :: nil), (sstk, glb1)) :: stk) bstk st3 eq_refl.
+        eapply rt_trans; [| apply H4].
+        eapply rt_step, ME_ex; auto.
+Qed.
 
 Lemma multi_ceval'_while_loop:
   forall fc lf b c l1 loc1 glb1 st2 bstk,
   beval (loc1, glb1) b = true ->
+  single_point l1 ->
   clos_refl_trans (middle_ceval' fc lf)
     ((c, Some (com_to_label_pure c :: nil), (loc1 :: nil, glb1)) :: nil)
     ((c, Some (l1 :: bstk), st2) :: nil) ->
@@ -1049,7 +1372,106 @@ Lemma multi_ceval'_while_loop:
     ((CWhile b c, Some ((LWhile b l1) :: bstk), st2) :: nil).
 Proof.
   intros.
-Admitted.
+  set (stk := @nil (com * option (list label) * state')).
+  unfold stk.
+  change ((c, Some (l1 :: bstk), st2) :: nil) with (stk ++ (c, Some (l1 :: bstk), st2) :: nil) in H1.
+  change ((While b Do c EndWhile, Some (LWhile b l1 :: bstk), st2) :: nil) with (stk ++ (While b Do c EndWhile, Some (LWhile b l1 :: bstk), st2) :: nil).
+  clearbody stk.
+  remember ((c, Some (com_to_label_pure c :: nil), (loc1 :: nil, glb1)) :: nil) as stk1.
+  remember (stk ++ (c, Some (l1 :: bstk), st2) :: nil) as stk2.
+  apply Operators_Properties.clos_rt_rtn1 in H1.
+  revert Heqstk2.
+  revert stk bstk st2.
+  generalize dependent l1.
+  induction H1; intros; subst.
+  - destruct stk.
+    + inversion Heqstk2; subst.
+      apply rt_refl.
+    + inversion Heqstk2; subst.
+      app_cons_nil H3.
+  - inversion H0; subst.
+    + destruct stk.
+      * inversion H3; subst.
+      * inversion H3; subst.
+        pose proof IHclos_refl_trans_n1 l1 H2 ((c0, Some bstk0, st1) :: stk) bstk st2 eq_refl.
+        eapply rt_trans; [apply H4 |].
+        apply rt_step, ME_r_pure; auto.
+    + destruct bstk1; [inversion H8 |].
+      destruct stk.
+      * inversion H3; subst.
+        destruct bstk2; inversion H7; subst.
+        {
+          inversion H1; subst.
+          + change (LWhile b l1 :: nil) with (nil ++ LWhile b l1 :: nil).
+            apply rt_step, ME_r_single; [apply SP_While; auto |].
+            apply E'_WhileTrue1; auto.
+            apply com_to_label_pure_is_pure.
+          + eapply middle_ceval'_right_single_point_bottom in H5; [| apply H8].
+            pose proof IHclos_refl_trans_n1 l H5 nil bstk1 st1 eq_refl.
+            eapply rt_trans; [apply H9 |].
+            change (LWhile b l1 :: nil) with (nil ++ LWhile b l1 :: nil).
+            apply rt_step, ME_r_single; [apply SP_While; auto |].
+            apply E'_WhileSeg1; auto.
+        }
+        {
+          inversion H1; subst.
+          + rewrite app_comm_cons.
+            apply rt_step, ME_r_single; auto.
+            apply E'_WhileTrue1; auto.
+            apply com_to_label_pure_is_pure.
+          + eapply middle_ceval'_right_single_point_bottom in H5; [| apply H8].
+            pose proof IHclos_refl_trans_n1 l H5 nil bstk1 st1 eq_refl.
+            eapply rt_trans; [apply H9 |].
+            rewrite app_comm_cons.
+            apply rt_step, ME_r_single; auto.
+            apply E'_WhileSeg1; auto.
+        }
+      * inversion H3; subst.
+        pose proof IHclos_refl_trans_n1 l1 H2 ((c0, Some (l :: bstk1), st1) :: stk) bstk st2 eq_refl.
+        eapply rt_trans; [apply H5 |].
+        apply rt_step, ME_r_single; auto.
+    + destruct stk; inversion H3; subst.
+      destruct stk.
+      * inversion H8; subst.
+        destruct bstk0; inversion H9; subst.
+        {
+          pose proof IHclos_refl_trans_n1 l1 H2 nil nil (sstk, glb) eq_refl.
+          eapply rt_trans; [apply H5 |].
+          change (LWhile b l1 :: nil) with (nil ++ LWhile b l1 :: nil).
+          eapply rt_step, ME_re; auto; auto.
+          apply SP_While; auto.
+        }
+        {
+          pose proof IHclos_refl_trans_n1 l1 H2 nil (bstk0 ++ l0 :: nil) (sstk, glb) eq_refl.
+          eapply rt_trans; [apply H5 |].
+          rewrite app_comm_cons.
+          eapply rt_step, ME_re; auto; auto.
+        }
+      * inversion H8; subst.
+        pose proof IHclos_refl_trans_n1 l1 H2 ((c1, Some (bstk0 ++ l0 :: nil), (sstk, glb)) :: stk) bstk st2 eq_refl.
+        eapply rt_trans; [apply H5 |].
+        eapply rt_step, ME_re; auto; auto.
+  + destruct stk.
+    * inversion H3; subst.
+      destruct bstk0; inversion H7; subst.
+      {
+        pose proof IHclos_refl_trans_n1 l1 H2 ((c1, None, (loc :: nil, glb0)) :: nil) nil (sstk, glb2) eq_refl.
+        eapply rt_trans; [apply H5 |].
+        change (LWhile b l1 :: nil) with (nil ++ LWhile b l1 :: nil).
+        eapply rt_step, ME_ex; auto.
+        apply SP_While; auto.
+      }
+      {
+        pose proof IHclos_refl_trans_n1 l1 H2 ((c1, None, (loc :: nil, glb0)) :: nil) (bstk0 ++ l2 :: nil) (sstk, glb2) eq_refl.
+        eapply rt_trans; [apply H5 |].
+        rewrite app_comm_cons.
+        eapply rt_step, ME_ex; auto.
+      }
+    * inversion H3; subst.
+      pose proof IHclos_refl_trans_n1 l1 H2 ((c1, None, (loc :: nil, glb0)) :: (c2, Some (bstk0 ++ l2 :: nil), (sstk, glb2)) :: stk) bstk st2 eq_refl.
+      eapply rt_trans; [apply H5 |].
+      eapply rt_step, ME_ex; auto.
+Qed.
 
 Lemma multi_ceval'_call_bottom :
   forall fc lf f bstk1 bstk2 l1 l2 sstk1 sstk2 glb1 glb2 pv loc,
@@ -1146,13 +1568,103 @@ Proof.
         }
 Qed.
 
+Lemma middle_ceval'_elevate:
+  forall stk fc lf stk1 stk2,
+  middle_ceval' fc lf stk1 stk2 ->
+  middle_ceval' fc lf (stk1 ++ stk) (stk2 ++ stk).
+Proof.
+  intros.
+  inversion H; subst.
+  - apply ME_r_pure. exact H0.
+  - apply ME_r_single; auto.
+  - eapply ME_re; auto.
+    exact H0.
+  - apply ME_ex; auto.
+Qed.
+
+Lemma cons_insert_nil {A: Type} :
+  forall (x : A) l, x :: l = (x :: nil) ++ l.
+Proof.
+  intros.
+  auto.
+Qed.
+
 Lemma multi_ceval'_elevate:
   forall fc lf c bstk1 bstk2 st1 st2 stk,
   multi_ceval' fc lf ((c, bstk1, st1) :: nil) ((c, bstk2, st2) :: nil) ->
   multi_ceval' fc lf ((c, bstk1, st1) :: stk) ((c, bstk2, st2) :: stk).
 Proof.
   intros.
-Admitted.
+  set (stk' := @nil (com * option lbstk * state')).
+  change ((c, bstk1, st1) :: nil) with (stk' ++ (c, bstk1, st1) :: nil) in H.
+  change ((c, bstk1, st1) :: stk) with (stk' ++ (c, bstk1, st1) :: stk).
+  clearbody stk'.
+  apply Operators_Properties.clos_rt_rt1n in H.
+(*   apply Operators_Properties.clos_rt1n_rt. *)
+  remember (stk' ++ (c, bstk1, st1) :: nil) as stk1.
+  remember ((c, bstk2, st2) :: nil) as stk2.
+  generalize dependent c.
+  revert bstk1 st1 stk'.
+  induction H; intros; subst.
+  - destruct stk'.
+    + inversion Heqstk2; subst.
+      apply rt_refl.
+    + inversion Heqstk2.
+      app_cons_nil H1.
+  - inversion H; subst.
+    + destruct stk'.
+      * inversion H1; subst.
+        inversion H0; subst; [| inversion H2].
+        apply rt_step.
+        simpl.
+        change ((c, Some bstk, st1) :: stk) with (((c, Some bstk, st1) :: nil) ++ stk).
+        change ((c, None, st2) :: stk) with (((c, None, st2) :: nil) ++ stk).
+        apply middle_ceval'_elevate; auto.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_1n bstk1 st1 ((c0, None, st3) :: stk') c eq_refl eq_refl.
+        eapply rt_trans; [| apply H2].
+        apply rt_step, ME_r_pure; auto.
+    + destruct stk'.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_1n (Some (bstk3 ++ l2 :: nil)) st3 nil c eq_refl eq_refl.
+        eapply rt_trans; [| apply H3].
+        simpl.
+        change ((c, Some bstk0, st1) :: stk) with (((c, Some bstk0, st1) :: nil) ++ stk).
+        change ((c, Some (bstk3 ++ l2 :: nil), st3) :: stk) with (((c, Some (bstk3 ++ l2 :: nil), st3) :: nil) ++ stk).
+        apply rt_step, middle_ceval'_elevate; auto.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_1n bstk1 st1 ((c0, Some (bstk3 ++ l2 :: nil), st3) :: stk') c eq_refl eq_refl.
+        eapply rt_trans; [| apply H3].
+        apply rt_step.
+        change ((c, bstk1, st1) :: stk) with (((c, bstk1, st1) :: nil) ++ stk).
+        change ((c, bstk1, st1) :: stk) with (((c, bstk1, st1) :: nil) ++ stk).
+        rewrite app_assoc.
+        rewrite app_assoc.
+        apply middle_ceval'_elevate; auto.
+    + destruct stk'.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_1n (Some (bstk ++ l1 :: nil)) (sstk, glb) ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: nil) c eq_refl eq_refl.
+        eapply rt_trans; [| apply H3].
+        apply rt_step. simpl.
+        eapply ME_re; auto; auto.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_1n bstk1 st1 ((func_bdy f, Some (com_to_label_pure (func_bdy f) :: nil), (loc :: nil, glb)) :: (c1, Some (bstk ++ l1 :: nil), (sstk, glb)) :: stk') c eq_refl eq_refl.
+        eapply rt_trans; [| apply H3].
+        apply rt_step. simpl.
+        eapply ME_re; auto; auto.
+    + destruct stk'; inversion H1; subst.
+      destruct stk'.
+      * inversion H6; subst.
+        pose proof IHclos_refl_trans_1n (Some (bstk ++ l2 :: nil)) (sstk, glb1) nil c eq_refl eq_refl.
+        eapply rt_trans; [| apply H3].
+        apply rt_step. simpl.
+        eapply ME_ex; auto.
+      * inversion H6; subst.
+        pose proof IHclos_refl_trans_1n bstk1 st1 ((c2, Some (bstk ++ l2 :: nil), (sstk, glb1)) :: stk') c eq_refl eq_refl.
+        eapply rt_trans; [| apply H3].
+        apply rt_step. simpl.
+        eapply ME_ex; auto.
+Qed.
 
 (** Denotational Sematics Relation *)
 Theorem ceval_multi_ceval' : forall fc lf c loc1 loc2 glb1 glb2,
@@ -1494,7 +2006,9 @@ Proof.
       {
         destruct bstk as [| l1 bstk]; [inversion H10 |].
         apply Operators_Properties.clos_rtn1_rt in H3.
-        eapply multi_ceval'_while_loop in H3; [| exact H].
+        eapply multi_ceval'_while_loop in H3; [| exact H |
+          eapply middle_ceval'_right_single_point_bottom;
+          [exact H10 | exact H4]].
         eapply rt_trans; [exact H3 |].
         eapply rt_trans; [| exact H6].
         apply rt_step, ME_r_single; auto.
