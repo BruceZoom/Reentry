@@ -434,11 +434,11 @@ Inductive provable (fc : func_context) (lf : public_funcs) (fp : func_predicate)
       (forall f x, In f lf -> fp f (I x) (I x)) ->
       provable fc lf fp ({{fun st => exists x, P x st /\ I x st}} CReentry {{fun st => exists x, P x st /\ I x st}})
   (* function predicate call *)
-  | hoare_call : forall f pv P Q R,
-      fp f P Q ->
-      globalp Q ->
-      localp R ->
-      provable fc lf fp ({{(pv_to_assertion fc f pv P) AND R}} CCall f pv {{Q AND R}})
+  | hoare_call : forall A f pv (Q P R: A -> Assertion),
+      (forall x, fp f (P x) (Q x)) ->
+      (forall x, globalp (Q x)) ->
+      (forall x, localp (R x)) ->
+      provable fc lf fp ({{fun st => exists x, (pv_to_assertion fc f pv (P x)) st /\ R x st}} CCall f pv {{fun st => exists x, Q x st /\ R x st}})
   (* traditional ones *)
   | hoare_skip : forall (P : Assertion),
       provable fc lf fp ({{P}} CSkip {{P}})
@@ -521,20 +521,21 @@ Proof.
 Qed.
 
 Lemma call_sound_weak sigma fc lf (fp: func_predicate) :
-  forall f pv P Q R,
-  fp f P Q ->
-  globalp Q ->
-  localp R ->
-  weak_valid sigma fc lf fp ({{(pv_to_assertion fc f pv P) AND R}} CCall f pv {{Q AND R}}).
+  forall A f pv (Q P R : A -> Assertion),
+  (forall x, fp f (P x) (Q x)) ->
+  (forall x, globalp (Q x)) ->
+  (forall x, localp (R x)) ->
+  weak_valid sigma fc lf fp ({{fun st => exists x, (pv_to_assertion fc f pv (P x)) st /\ R x st}} CCall f pv {{fun st => exists x, Q x st /\ R x st}}).
 Proof.
   unfold weak_valid, fp_valid, triple_valid.
   unfold andp.
   intros.
   inversion H4; subst.
-  destruct H3.
+  destruct H3 as [? [? ?]].
+  exists x.
   split.
   - unfold pv_to_assertion in H3.
-    pose proof H2 _ _ _ H _ _ H3 H9.
+    pose proof H2 _ _ _ (H x) _ _ H3 H9.
     eapply H0.
     apply H6.
   - eapply H1.
@@ -640,8 +641,7 @@ Proof.
   {
     induction H.
     - apply rt1n_refl.
-    - eapply rt1n_trans.
-      2:{ apply IHarbitrary_eval. }
+    - eapply rt1n_trans; [| apply IHarbitrary_eval].
       unfold reCall_semantic.
       exists f, pv, loc.
       auto.
@@ -803,7 +803,7 @@ Proof.
     clear Heqrargs.
     simpl in H.
 (*     specialize (IHrargs (rev rargs) (rev_involutive _)) as [P' ?]. *)
-Admitted.
+Abort.
 
 Lemma hoare_call_complete: forall fc lf fp f prms P Q,
   valid fc lf ({{P}} f [(prms)] {{Q}}) ->
@@ -812,27 +812,62 @@ Lemma hoare_call_complete: forall fc lf fp f prms P Q,
 Proof.
   intros.
   pose proof hoare_call.
-  remember ((fun (st: state) => exists glb, P (fst st, glb)):Assertion) as R.
-  pose proof undo_P2A_existence fc f prms P as [P' ?].
-  pose proof ((fun (st: state) => exists loc, Q (loc, snd st)):Assertion) as Q'.
-  (* exists x *)
-  (* P --asgn-- P' *)
-  (* sp(P') |-- Q *)
-  apply (hoare_consequence _ _ _ _ (pv_to_assertion fc f prms P' AND R) _ (Q' AND R)).
-  - unfold derives, andp.
+  remember (fun loc (st:state) => fst st = loc) as R.
+  assert (forall x, localp (R x)).
+  {
+    unfold localp.
     intros.
-    split; [subst; auto |].
-    subst R.
-    exists (snd st).
-    destruct st; auto.
+    subst.
+    simpl in *.
+    auto.
+  }
+  (* construct the inverse (st |== P') ~ (st' |== P) *)
+  remember (fun st' (st:state) => P st' /\ st = (param_to_local_state st' (func_arg f) prms, snd st')) as P'.
+  assert (P |-- (fun st => exists x, (pv_to_assertion fc f prms (P' x)) st /\ R (fst x) st)).
+  {
+    unfold derives, pv_to_assertion.
+    subst.
+    intros.
+    simpl.
+    exists st.
+    destruct st.
+    split; auto.
+  }
+  remember (fun x (st:state) => exists st0 loc, P' x st0 /\ ceval fc lf (func_bdy f) st0 (loc, snd st)) as Q'.
+  eapply (hoare_consequence _ _ _ _ _ _ (fun st => exists x, Q' x st /\ R (fst x) st)).
+  - apply H3.
   - eapply hoare_call.
     + subst.
-      unfold valid, triple_valid in *.
+      unfold valid, triple_valid.
       intros.
-      destruct st1 as [loc1 glb1].
-      pose proof E_Call.
-(*       eapply E_Call in H1. *)
-Admitted.
+      destruct st2.
+      exists st1, u.
+      simpl.
+      auto.
+    + subst.
+      unfold globalp.
+      intros.
+      destruct H0 as [? [? ?]].
+      exists x0, x1.
+      auto.
+    + subst.
+      unfold localp.
+      intros.
+      simpl in *.
+      auto.
+  - subst.
+    unfold derives.
+    intros.
+    destruct H0 as [? [[? [? [[? ?] ?]]] ?]].
+    destruct x, x0.
+    inversion H4; subst.
+    simpl in *.
+    eapply E_Call in H5.
+    eapply H in H5; auto.
+    subst.
+    destruct st.
+    auto.
+Qed.
 
 Lemma hoare_triple_complete: forall fc lf fp tr,
   valid fc lf tr ->
@@ -847,9 +882,7 @@ Proof.
   - admit.
   - admit.
   - admit.
-  - pose proof E_Call.
-    pose proof hoare_call.
-    admit.
+  - apply hoare_call_complete; auto.
   - apply hoare_reentry_complete; auto.
 Admitted.
 
