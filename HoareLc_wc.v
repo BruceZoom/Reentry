@@ -60,18 +60,18 @@ Proof.
   destruct f; auto.
 Qed.
 
-Fixpoint retrive_func (lb: label) (c: com) : option func :=
+Fixpoint retrieve_func (lb: label) (c: com) : option func :=
   match lb, c with
   | LHere, CCall f _ => Some f
   | LHere, _ => None
-  | LSeq l1 l2, CSeq c1 c2 => combine (retrive_func l1 c1) (retrive_func l2 c2)
-  | LIf _ l1 l2, CIf _ c1 c2 => combine (retrive_func l1 c1) (retrive_func l2 c2)
-  | LWhile _ l1, CWhile _ c1 => retrive_func l1 c1
+  | LSeq l1 l2, CSeq c1 c2 => combine (retrieve_func l1 c1) (retrieve_func l2 c2)
+  | LIf _ l1 l2, CIf _ c1 c2 => combine (retrieve_func l1 c1) (retrieve_func l2 c2)
+  | LWhile _ l1, CWhile _ c1 => retrieve_func l1 c1
   | _, _ => None
   end.
 
-Lemma retrive_func_pure :
-  forall lb c, is_pure lb -> retrive_func lb c = None.
+Lemma retrieve_func_pure :
+  forall lb c, is_pure lb -> retrieve_func lb c = None.
 Proof.
   intros.
   revert c.
@@ -86,7 +86,7 @@ Fixpoint matched_lbstk (fc: func_context) (bstk: lbstk) (c: com) : Prop :=
   match bstk with
   | nil => True
   | lb :: bstk => single_point lb /\ matched_label lb c /\
-      match bstk, (retrive_func lb c) with
+      match bstk, (retrieve_func lb c) with
       | nil, None => True
       | _, Some f => matched_lbstk fc bstk (func_bdy f)
       | _, None => False
@@ -97,7 +97,7 @@ Fixpoint matched_lbstk (fc: func_context) (bstk: lbstk) (c: com) : Prop :=
   match bstk with
   | nil => True
   | lb :: bstk => single_point lb /\ matched_label lb c /\
-      match bstk, (retrive_func lb c) with
+      match bstk, (retrieve_func lb c) with
       | nil, None => True
       | _, Some f => matched_lbstk fc bstk (func_bdy f)
       | _, None => False
@@ -276,16 +276,43 @@ Proof.
   revert l1 bstk.
   induction H0; intros; inversion Heqbstk'; subst; auto;
   try (inversion H; tauto).
-  + inversion H2.
-  + inversion H4.
-  + inversion H3; subst.
+  - inversion H2.
+  - inversion H4.
+  - inversion H3; subst.
     pose proof IHceval'1 l1 bstk H6 eq_refl.
     pose proof IHceval'2 l3 nil H7 eq_refl.
     subst. auto.
-  + inversion H2; subst.
+  - inversion H2; subst.
     pose proof IHceval' l1 bstk H5 eq_refl.
     subst. auto.
-Admitted.
+  - inversion H2; subst.
+    pose proof IHceval' l1 bstk H6 eq_refl.
+    subst; auto.
+  - inversion H3; subst.
+    pose proof IHceval' l1 nil H6 eq_refl.
+    subst; auto.
+  - inversion H3; subst.
+    pose proof IHceval' l1 nil H8 eq_refl.
+    subst; auto.
+  - inversion H2; subst.
+    pose proof IHceval' l1 bstk H5 eq_refl.
+    subst; auto.
+  - inversion H2; subst.
+    pose proof IHceval' l1 bstk H7 eq_refl.
+    subst; auto.
+  - inversion H3; subst.
+    pose proof IHceval' l1 nil H5 eq_refl.
+    subst; auto.
+  - eapply IHceval'2; auto.
+  - simpl.
+    inversion H2; subst.
+    pose proof IHceval' l1 bstk H4 eq_refl.
+    subst; auto.
+  - simpl.
+    inversion H1; subst.
+    pose proof IHceval'1 l1 bstk H3 eq_refl.
+    subst; auto.
+Qed.
 
 Lemma ceval'_pure_tail :
   forall fc c l1 l2 st1 st2 bstk,
@@ -340,7 +367,42 @@ Lemma ceval'_matched_tail :
   ceval' fc c l1 (l2 :: bstk) st1 st2 ->
   matched_label l2 c.
 Proof.
-Admitted.
+  intros.
+  remember (l2 :: bstk) as bstk'.
+  revert Heqbstk'.
+  revert l2 bstk.
+  induction H; intros; subst; auto;
+  inversion Heqbstk'; subst; try (constructor; tauto).
+  - pose proof IHceval'1 l2 nil eq_refl.
+    pose proof IHceval'2 l4 bstk eq_refl.
+    apply ML_Seq; auto.
+  - pose proof IHceval' l2 bstk eq_refl.
+    apply ML_Seq; auto.
+    apply com_to_label_pure_matched.
+  - pose proof IHceval' l2 bstk eq_refl.
+    apply ML_Seq; auto.
+    apply com_to_label_pure_matched.
+  - pose proof IHceval' l2 bstk0 eq_refl.
+    apply ML_If; auto.
+    apply com_to_label_pure_matched.
+  - pose proof IHceval' l2 bstk0 eq_refl.
+    apply ML_If; auto.
+    apply com_to_label_pure_matched.
+  - pose proof IHceval' l2 bstk eq_refl.
+    apply ML_If; auto.
+    apply com_to_label_pure_matched.
+  - pose proof IHceval' l2 bstk eq_refl.
+    apply ML_If; auto.
+    apply com_to_label_pure_matched.
+  - apply ML_While.
+    apply com_to_label_pure_matched.
+  - pose proof IHceval' l2 bstk0 eq_refl.
+    apply ML_While; auto.
+  - pose proof IHceval'2 l0 bstk0 eq_refl; auto.
+  - pose proof IHceval' l2 bstk eq_refl.
+    apply ML_While; auto.
+  - pose proof IHceval'2 l0 bstk eq_refl; auto.
+Qed.
 
 Lemma ceval'_matched_lbstk_left :
   forall fc c st1 st2 bstk1 bstk2 l1,
@@ -355,47 +417,249 @@ Proof.
   assert (~ single_point LPure).
   { unfold not. intros. inversion H0. }
   induction H; intros; subst; inversion Heqbstk'; subst;
-  try congruence; simpl; auto.
+  try congruence; simpl; auto; split; auto.
   - split; auto.
-    split; auto.
     apply ML_Reentry_here.
-  - split; auto.
-    split; [apply ML_Call_here |].
+  - split; [apply ML_Call_here |].
     destruct bstk.
     + pose proof IHceval' l1 nil H eq_refl.
       auto.
     + apply ceval'_single_point_stack_left_t2b in H2; auto.
       pose proof IHceval' l (bstk ++ l1 :: nil) H2 eq_refl.
       auto.
-  - split; auto.
-    split; [apply ML_Call_here |].
+  - split; [apply ML_Call_here |].
     destruct bstk1.
     + pose proof IHceval' l1 nil H eq_refl.
       auto.
     + apply ceval'_single_point_stack_left_t2b in H4; auto.
       pose proof IHceval' l (bstk1 ++ l1 :: nil) H4 eq_refl.
       auto.
-  - split; auto.
-    split.
+  - split.
     + apply ceval'_matched_head in H4.
       apply ceval'_matched_head in H5.
       apply ML_Seq; auto.
     + inversion H6; subst; [| apply pure_no_point in H2; congruence].
       pose proof IHceval'1 l1 bstk0 H9 eq_refl.
       simpl in H7.
-      pose proof retrive_func_pure l3 c2 H2.
+      pose proof retrieve_func_pure l3 c2 H2.
       rewrite H8.
       rewrite combine_left.
       tauto.
-Admitted.
+  - split.
+    + apply ceval'_matched_head in H2.
+      apply ML_Seq; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [| pose proof com_to_label_pure_no_point c2; congruence].
+      pose proof IHceval' l1 bstk0 H6 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c2) c2 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_left.
+      tauto.
+  - split.
+    + apply ceval'_matched_head in H2.
+      apply ML_Seq; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [pose proof com_to_label_pure_no_point c1; congruence |].
+      pose proof IHceval' l1 bstk0 H7 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c1) c1 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_right.
+      tauto.
+  - split.
+    + apply ceval'_matched_head in H3.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + destruct (combine (retrieve_func l1 c1) (retrieve_func (com_to_label_pure c2) c2)); auto.
+  - split.
+    + apply ceval'_matched_head in H3.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + destruct (combine (retrieve_func (com_to_label_pure c1) c1) (retrieve_func l1 c2)); auto.
+  - split; auto.
+    + apply ceval'_matched_head in H2.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [| pose proof com_to_label_pure_no_point c2; congruence].
+      pose proof IHceval' l1 bstk0 H6 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c2) c2 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_left.
+      tauto.
+  - split.
+    + apply ceval'_matched_head in H2.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [pose proof com_to_label_pure_no_point c1; congruence |].
+      pose proof IHceval' l1 bstk0 H8 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c1) c1 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_right.
+      tauto.
+  - split.
+    + apply ML_While.
+      apply com_to_label_pure_matched.
+    + destruct (retrieve_func (com_to_label_pure c) c); auto.
+  - split.
+    + apply ML_While.
+      apply ceval'_matched_head in H3; auto.
+    + destruct (retrieve_func l1 c); auto.
+  - split.
+    + apply ceval'_matched_head in H4; auto.
+    + destruct (retrieve_func l0 (While b Do c EndWhile)); auto.
+  - split.
+    + apply ML_While.
+      apply ceval'_matched_head in H2; auto.
+    + inversion H3; subst.
+      pose proof IHceval' l1 bstk0 H5 eq_refl.
+      simpl in H4.
+      tauto.
+  - split.
+    + apply ML_While.
+      apply ceval'_matched_head in H2; auto.
+    + inversion H4; subst.
+      pose proof IHceval'1 l1 bstk0 H6 eq_refl.
+      simpl in H5.
+      tauto.
+Qed.
 
 Lemma ceval'_matched_lbstk_right :
-  forall fc c st1 st2 bstk1 bstk2 l2,
-  ceval' fc c bstk1 (l2 :: bstk2) st1 st2 ->
-  single_point l2 ->
-  matched_lbstk fc (l2 :: bstk2) c.
+  forall fc c st1 st2 bstk1 bstk2 l1,
+  ceval' fc c bstk2 (l1 :: bstk1) st1 st2 ->
+  single_point l1 ->
+  matched_lbstk fc (l1 :: bstk1) c.
 Proof.
-Admitted.
+  intros.
+  remember (l1 :: bstk1) as bstk'.
+  revert H0 Heqbstk'.
+  revert l1 bstk1.
+  assert (~ single_point LPure).
+  { unfold not. intros. inversion H0. }
+  induction H; intros; subst; inversion Heqbstk'; subst;
+  try congruence; simpl; auto; split; auto.
+  - split; auto.
+    apply ML_Reentry_here.
+  - split; [apply ML_Call_here |].
+    destruct bstk.
+    + pose proof IHceval' l2 nil H eq_refl.
+      auto.
+    + apply ceval'_single_point_stack_right_t2b in H2; auto.
+      pose proof IHceval' l (bstk ++ l2 :: nil) H2 eq_refl.
+      auto.
+  - split; [apply ML_Call_here |].
+    destruct bstk2.
+    + pose proof IHceval' l2 nil H1 eq_refl.
+      auto.
+    + apply ceval'_single_point_stack_right_t2b in H4; auto.
+      pose proof IHceval' l (bstk2 ++ l2 :: nil) H4 eq_refl.
+      auto.
+  - split.
+    + apply ceval'_matched_tail in H4.
+      apply ceval'_matched_tail in H5.
+      apply ML_Seq; auto.
+    + inversion H6; subst; [apply pure_no_point in H1; congruence |].
+      pose proof IHceval'2 l4 bstk0 H10 eq_refl.
+      simpl in H7.
+      pose proof retrieve_func_pure l2 c1 H1.
+      rewrite H8.
+      rewrite combine_right.
+      tauto.
+  - split.
+    + apply ceval'_matched_tail in H2.
+      apply ML_Seq; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [| pose proof com_to_label_pure_no_point c2; congruence].
+      pose proof IHceval' l2 bstk0 H6 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c2) c2 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_left.
+      tauto.
+  - split.
+    + apply ceval'_matched_tail in H2.
+      apply ML_Seq; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [pose proof com_to_label_pure_no_point c1; congruence |].
+      pose proof IHceval' l2 bstk0 H7 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c1) c1 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_right.
+      tauto.
+  - split.
+    + apply ceval'_matched_tail in H3.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + inversion H4; subst; [| pose proof com_to_label_pure_no_point c2; congruence].
+      pose proof IHceval' l2 bstk1 H7 eq_refl.
+      pose proof retrieve_func_pure (com_to_label_pure c2) c2 (com_to_label_pure_is_pure _).
+      rewrite H6.
+      rewrite combine_left.
+      simpl in H5.
+      tauto.
+  - split.
+    + apply ceval'_matched_tail in H3.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + inversion H4; subst; [pose proof com_to_label_pure_no_point c1; congruence |].
+      pose proof IHceval' l2 bstk1 H9 eq_refl.
+      pose proof retrieve_func_pure (com_to_label_pure c1) c1 (com_to_label_pure_is_pure _).
+      rewrite H6.
+      rewrite combine_right.
+      simpl in H5.
+      tauto.
+  - split; auto.
+    + apply ceval'_matched_tail in H2.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [| pose proof com_to_label_pure_no_point c2; congruence].
+      pose proof IHceval' l2 bstk0 H6 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c2) c2 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_left.
+      tauto.
+  - split.
+    + apply ceval'_matched_tail in H2.
+      apply ML_If; auto.
+      apply com_to_label_pure_matched.
+    + inversion H3; subst; [pose proof com_to_label_pure_no_point c1; congruence |].
+      pose proof IHceval' l2 bstk0 H8 eq_refl.
+      simpl in H4.
+      pose proof retrieve_func_pure (com_to_label_pure c1) c1 (com_to_label_pure_is_pure _).
+      rewrite H5.
+      rewrite combine_right.
+      tauto.
+  - split.
+    + apply ML_While.
+      apply com_to_label_pure_matched.
+    + destruct (retrieve_func (com_to_label_pure c) c); auto.
+  - split.
+    + apply ML_While.
+      apply ceval'_matched_tail in H3; auto.
+    + inversion H4; subst.
+      pose proof IHceval' l2 bstk1 H6 eq_refl.
+      simpl in H5; tauto.
+  - split.
+    + apply ceval'_matched_tail in H4; auto.
+    + pose proof IHceval'2 l0 bstk1 H5 eq_refl.
+      simpl in H6; tauto.
+  - split.
+    + apply ML_While.
+      apply ceval'_matched_tail in H2; auto.
+    + inversion H3; subst.
+      pose proof IHceval' l2 bstk0 H5 eq_refl.
+      simpl in H4.
+      tauto.
+  - split.
+    + apply ceval'_matched_tail in H3; auto.
+    + pose proof IHceval'2 l0 bstk0 H4 eq_refl.
+      simpl in H5.
+      tauto.
+Qed.
 
 Lemma ceval'_single_point_stack_left_bottom :
   forall fc c l1 l2 bstk1 bstk2 st1 st2,
@@ -415,14 +679,61 @@ Proof.
   - pose proof IHceval' l1 bstk0 l3 eq_refl.
     apply SP_Seq1; auto.
     apply com_to_label_pure_is_pure.
-Admitted.
+  - pose proof IHceval' l1 bstk0 l3 eq_refl.
+    apply SP_Seq2; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l1 bstk0 l3 eq_refl.
+    apply SP_If1; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l1 bstk0 l3 eq_refl.
+    apply SP_If2; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l1 bstk0 l3 eq_refl.
+    apply SP_While; auto.
+  - pose proof IHceval'1 l1 bstk0 l3 eq_refl.
+    apply SP_While; auto.
+Qed.
 
 Lemma ceval'_single_point_stack_right_bottom :
   forall fc c l1 l2 bstk1 bstk2 st1 st2,
   ceval' fc c bstk1 (l1 :: bstk2 ++ l2 :: nil) st1 st2 ->
   single_point l1.
 Proof.
-Admitted.
+  intros.
+  remember (l1 :: bstk2 ++ l2 :: nil) as bstk'.
+  revert Heqbstk'.
+  revert l1 bstk2 l2.
+  induction H; intros; inversion Heqbstk'; subst;
+  try apply SP_Here;
+  app_cons_nil H6; app_cons_nil H5; app_cons_nil H4;
+  app_cons_nil H3; app_cons_nil H2; app_cons_nil H1.
+  - pose proof IHceval'2 l4 bstk0 l5 eq_refl.
+    apply SP_Seq2; auto.
+  - pose proof IHceval' l2 bstk0 l3 eq_refl.
+    apply SP_Seq1; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l2 bstk0 l3 eq_refl.
+    apply SP_Seq2; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l2 bstk2 l3 eq_refl.
+    apply SP_If1; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l2 bstk2 l3 eq_refl.
+    apply SP_If2; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l2 bstk0 l3 eq_refl.
+    apply SP_If1; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l2 bstk0 l3 eq_refl.
+    apply SP_If2; auto.
+    apply com_to_label_pure_is_pure.
+  - pose proof IHceval' l2 bstk2 l3 eq_refl.
+    apply SP_While; auto.
+  - pose proof IHceval'2 l0 bstk2 l3 eq_refl; auto.
+  - pose proof IHceval' l2 bstk0 l3 eq_refl.
+    apply SP_While; auto.
+  - pose proof IHceval'2 l0 bstk0 l3 eq_refl; auto.
+Qed.
 
 Lemma multi_ceval'_stack_bottom:
   forall fc lf stk1 f st,
@@ -1336,4 +1647,4 @@ Proof.
     }
 Qed.
 
-
+Print Assumptions reentry_invariant.
