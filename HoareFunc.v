@@ -12,6 +12,37 @@ Arguments clos_refl_trans_n1 {A} _ _ _.
 
 Require Import FunctionalExtensionality.
 
+Fixpoint iter_loop_body (b : bexp) (loop_body : state -> state -> Prop) (n : nat): state -> state -> Prop :=
+  match n with
+  | O => fun st1 st2 => st1 = st2 /\ beval st1 b = false
+  | S n' => fun st1 st3 => (exists st2, loop_body st1 st2 /\ iter_loop_body b loop_body n' st2 st3 /\ beval st1 b = true)
+  end.
+
+Definition while_body_sem (b : bexp) (loop_body : state -> state -> Prop) st1 st2 : Prop :=
+  loop_body st1 st2 /\ beval st1 b = true.
+
+Definition while_sem b loop_body : state -> state -> Prop :=
+  clos_refl_trans (while_body_sem b loop_body).
+
+Definition while_sem_1n b loop_body : state -> state -> Prop :=
+  clos_refl_trans_1n (while_body_sem b loop_body).
+
+Definition while_sem_n1 b loop_body : state -> state -> Prop :=
+  clos_refl_trans_n1 (while_body_sem b loop_body).
+
+(* Fixpoint iter_loop_body'_1n  (n : nat): state -> state -> Prop :=
+  match n with
+  | O => fun st1 st2 => st1 = st2
+  | S n' => fun st1 st3 => exists st2, iter_loop_body'_1n b loop_body n' st2 st3 /\ loop_body st1 st2 /\ beval st1 b = true
+  end.
+
+Fixpoint iter_loop_body'_n1 (b : bexp) (loop_body : state -> state -> Prop) (n : nat): state -> state -> Prop :=
+  match n with
+  | O => fun st1 st2 => st1 = st2
+  | S n' => fun st1 st3 => exists st2, iter_loop_body'_n1 b loop_body n' st1 st2 /\ loop_body st2 st3 /\ beval st2 b = true
+  end. *)
+
+
 (* ceval' sigma c st1 st2
 
 sg n
@@ -313,8 +344,8 @@ Proof.
       admit.
 Abort. *)
 
-Fact pass' : False. Admitted.
-Ltac pass := pose proof pass' as Htest; inversion Htest.
+(* Fact pass' : False. Admitted.
+Ltac pass := pose proof pass' as Htest; inversion Htest. *)
 
 (* One way does not work *)
 Lemma ceval'_ceval (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
@@ -542,6 +573,125 @@ Proof.
     apply H5.
 Qed.
 
+Lemma skip_sound_weak sigma fc lf (fp: func_predicate) :
+  forall P,
+  weak_valid sigma fc lf fp ({{P}} CSkip {{P}}).
+Proof.
+  unfold weak_valid, fp_valid, triple_valid.
+  intros.
+  inversion H1; subst; auto.
+Qed.
+
+Lemma assgn_sound_weak sigma fc lf (fp: func_predicate) :
+  forall P X E,
+  weak_valid sigma fc lf fp ({{P [X |-> E] }} CAss X E {{P}}).
+Proof.
+  unfold weak_valid, fp_valid, triple_valid.
+  intros.
+  inversion H1; subst; auto.
+Qed.
+
+Lemma seq_sound_weak sigma fc lf (fp: func_predicate) :
+  forall P Q R c1 c2,
+  weak_valid sigma fc lf fp ({{P}} c1 {{Q}}) ->
+  weak_valid sigma fc lf fp ({{Q}} c2 {{R}}) ->
+  weak_valid sigma fc lf fp ({{P}} c1;; c2 {{R}}).
+Proof.
+  unfold weak_valid, triple_valid.
+  intros.
+  inversion H3; subst.
+  pose proof H H1 _ _ H2 H6.
+  pose proof H0 H1 _ _ H4 H9.
+  auto.
+Qed.
+
+Lemma if_sound_weak sigma fc lf (fp: func_predicate) :
+  forall P b Q c1 c2,
+  weak_valid sigma fc lf fp ({{P AND {[b]}}} c1 {{Q}}) ->
+  weak_valid sigma fc lf fp ({{P AND NOT {[b]}}} c2 {{Q}}) ->
+  weak_valid sigma fc lf fp ({{P}} If b Then c1 Else c2 EndIf {{Q}}).
+Proof.
+  unfold weak_valid, triple_valid.
+  intros.
+  inversion H3; subst.
+  - eapply H; auto.
+    + unfold andp.
+      split; [apply H2 | apply H9].
+    + auto.
+  - eapply H0; auto.
+    + unfold andp, notp, not.
+      split; [apply H2 | congruence].
+    + auto.
+Qed.
+
+Lemma while_sem_equiv fc lf sigma:
+  forall b c st1 st2,
+  (exists n, iter_loop_body b (ceval' sigma fc lf c) n st1 st2) <->
+  ceval' sigma fc lf (CWhile b c) st1 st2.
+Proof.
+  split; intros.
+  - destruct H as [n ?].
+    revert H.
+    revert c st1 st2.
+    induction n; intros.
+    + simpl in H.
+      destruct H; subst.
+      apply E'_WhileFalse; auto.
+    + simpl in H.
+      destruct H as [st3 [? [? ?]]].
+      apply E'_WhileTrue with st3; auto.
+  - remember (While b Do c EndWhile) as c'.
+    induction H; subst; inversion Heqc'; subst.
+    + exists 0.
+      simpl.
+      tauto.
+    + specialize (IHceval'2 eq_refl).
+      destruct IHceval'2 as [n ?].
+      exists (S n).
+      simpl.
+      exists st2; split; auto.
+Qed.
+
+Lemma while_sound_weak sigma fc lf (fp: func_predicate) :
+  forall P c b,
+  weak_valid sigma fc lf fp ({{P AND {[b]}}} c {{P}}) ->
+  weak_valid sigma fc lf fp ({{P}} While b Do c EndWhile {{P AND NOT {[b]}}}).
+Proof.
+  unfold weak_valid, triple_valid.
+  intros.
+  rewrite <- while_sem_equiv in H2.
+  destruct H2 as [n ?].
+  revert H1 H2.
+  revert st1 st2.
+  induction n; intros.
+  - destruct H2 as [? ?]; subst.
+    unfold andp, notp; split; auto.
+    unfold bassn, not.
+    congruence.
+  - simpl in H2.
+    destruct H2 as [st3 [? [? ?]]].
+    apply IHn with st3; auto.
+    apply H with st1; auto.
+    unfold andp, bassn.
+    tauto.
+Qed.
+
+Lemma consequence_sound_weak sigma fc lf (fp: func_predicate) :
+  forall P Q P' Q' c,
+  P |-- P' ->
+  Q' |-- Q ->
+  weak_valid sigma fc lf fp ({{P'}} c {{Q'}}) ->
+  weak_valid sigma fc lf fp ({{P}} c {{Q}}).
+Proof.
+  unfold weak_valid, triple_valid.
+  intros.
+  apply H in H3.
+  apply H0.
+  eapply H1; auto.
+  + apply H3.
+  + auto.
+Qed.
+
 Theorem hoare_sound_weak : forall sigma fc lf fp tr,
   provable fc lf fp tr ->
   weak_valid sigma fc lf fp tr.
@@ -550,7 +700,13 @@ Proof.
   induction H.
   - apply reentry_sound_weak; auto.
   - apply call_sound_weak; auto.
-Admitted.
+  - apply skip_sound_weak; auto.
+  - apply assgn_sound_weak; auto.
+  - apply seq_sound_weak with Q; auto.
+  - apply if_sound_weak; auto.
+  - apply while_sound_weak; auto.
+  - apply consequence_sound_weak with P' Q'; auto.
+Qed.
 
 Import FixpointSigma.
 
@@ -707,17 +863,16 @@ Lemma hoare_reentry_complete: forall fc lf fp P Q,
 Proof.
   intros.
   remember ((fun loc (st:state) => fst st = loc):unit_state -> Assertion) as P'.
-  remember ((fun (st:state) => exists st0, P st0 /\ reentry_semantic fc lf st0 st):Assertion) as I'.
-  remember ((fun loc st => I' (loc, snd st)):unit_state -> Assertion) as I.
+  remember ((fun loc (st:state) => exists glb0, P (loc, glb0) /\ arbitrary_eval fc lf glb0 (snd st)):unit_state -> Assertion) as I.
   remember (fun st => exists loc, P' loc st /\ I loc st) as R.
-(*   pose proof hoare_consequence. *)
   apply (hoare_consequence _ _ _ _ R _ R _).
   + unfold derives.
     intros.
     destruct st as [loc glb].
     subst.
     exists loc; split; auto.
-    exists (loc, glb); repeat split; auto.
+    exists glb; repeat split; auto.
+(*     exists (loc, glb); repeat split; auto. *)
     apply ArE_nil.
   + subst R.
     eapply hoare_reentry.
@@ -729,18 +884,18 @@ Proof.
       unfold globalp.
       intros.
       subst.
-      destruct H1 as [[loc0 glb0] [? [? ?]]].
+      destruct H1 as [glb0 [? ?]].
       subst.
-      exists (loc, glb0).
+      exists glb0.
       repeat split; auto.
     * intros f loc.
       subst.
       simpl.
       intros.
-      destruct H1 as [[loc0 glb0] [? ?]].
+      destruct H1 as [glb0 [? ?]].
       destruct st1 as [loc1 glb1].
       destruct st2 as [loc2 glb2].
-      exists (loc0, glb0).
+      exists glb0.
       split; auto.
       simpl in *.
       pose proof undo_param_existence loc1 glb1 (func_arg f) as [loc' [pv ?]].
@@ -753,8 +908,8 @@ Proof.
         exists f, pv, loc'.
         auto.
       }
-      destruct H3.
-      split; auto.
+(*       destruct H3. *)
+(*       split; auto. *)
       rewrite arbitrary_eval_abeval_1n in *.
       rewrite abeval_1n_n1_iff in *.
       eapply rtn1_trans.
@@ -762,7 +917,7 @@ Proof.
       -- apply H3.
   + unfold derives.
     intros. subst.
-    destruct H1 as [loc [? [[loc0 glb0] [? [? ?]]]]].
+    destruct H1 as [loc [? [glb0 [? ?]]]].
     destruct st as [loc' glb].
     simpl in H0. subst.
     simpl in *.
@@ -772,7 +927,7 @@ Proof.
       apply H2.
 Qed.
 
-Lemma undo_P2A_existence : forall fc f prms P,
+(* Lemma undo_P2A_existence : forall fc f prms P,
   exists P', pv_to_assertion fc f prms P' = P.
 Proof.
   intros.
@@ -803,7 +958,7 @@ Proof.
     clear Heqrargs.
     simpl in H.
 (*     specialize (IHrargs (rev rargs) (rev_involutive _)) as [P' ?]. *)
-Abort.
+Abort. *)
 
 Lemma hoare_call_complete: forall fc lf fp f prms P Q,
   valid fc lf ({{P}} f [(prms)] {{Q}}) ->
@@ -869,6 +1024,138 @@ Proof.
     auto.
 Qed.
 
+Lemma derives_refl: forall P, P |-- P.
+Proof.
+  unfold derives; auto.
+Qed.
+
+Lemma hoare_skip_complete:
+  forall fc lf fp P Q,
+  valid fc lf ({{P}} Skip {{Q}}) ->
+  provable fc lf fp ({{P}} Skip {{Q}}).
+Proof.
+  unfold valid, triple_valid.
+  intros.
+  eapply hoare_consequence.
+  + apply derives_refl.
+  + apply hoare_skip.
+  + unfold derives.
+    intros.
+    eapply H.
+    - apply H0.
+    - apply E_Skip.
+Qed.
+
+Lemma hoare_assn_complete:
+  forall fc lf fp P Q X E,
+  valid fc lf ({{P}} CAss X E {{Q}}) ->
+  provable fc lf fp ({{P}} CAss X E {{Q}}).
+Proof.
+  unfold valid, triple_valid.
+  intros.
+  eapply hoare_consequence; [| | apply derives_refl].
+  2:{
+    apply hoare_asgn_bwd.
+  }
+  unfold derives.
+  intros.
+  eapply H; [apply H0 |].
+  apply E_Ass; auto.
+Qed.
+
+Lemma hoare_seq_complete:
+  forall fc lf fp P Q c1 c2,
+  (forall P Q : Assertion, valid fc lf ({{P}} c1 {{Q}}) -> provable fc lf fp ({{P}} c1 {{Q}})) ->
+  (forall P Q : Assertion, valid fc lf ({{P}} c2 {{Q}}) -> provable fc lf fp ({{P}} c2 {{Q}})) ->
+  valid fc lf ({{P}} c1;; c2 {{Q}}) ->
+  provable fc lf fp ({{P}} c1;; c2 {{Q}}).
+Proof.
+  unfold valid, triple_valid.
+  intros.
+  remember (fun st:state => exists st1, P st1 /\ ceval fc lf c1 st1 st) as R.
+  eapply hoare_seq with R.
+  - eapply H.
+    intros; subst.
+    exists st1; auto.
+  - eapply H0.
+    intros; subst.
+    destruct H2 as [st3 [? ?]].
+    eapply H1.
+    + apply H2.
+    + eapply E_Seq with st1; auto.
+Qed.
+
+Lemma hoare_if_complete:
+  forall fc lf fp P Q c1 c2 b,
+  (forall P Q : Assertion, valid fc lf ({{P}} c1 {{Q}}) -> provable fc lf fp ({{P}} c1 {{Q}})) ->
+  (forall P Q : Assertion, valid fc lf ({{P}} c2 {{Q}}) -> provable fc lf fp ({{P}} c2 {{Q}})) ->
+  valid fc lf ({{P}} If b Then c1 Else c2 EndIf {{Q}}) ->
+  provable fc lf fp ({{P}} If b Then c1 Else c2 EndIf {{Q}}).
+Proof.
+  unfold valid, triple_valid.
+  intros.
+  apply hoare_if.
+  - apply H; intros.
+    unfold andp in H2.
+    destruct H2.
+    eapply H1.
+    + apply H2.
+    + apply E_IfTrue; auto.
+  - apply H0; intros.
+    unfold andp, notp in H2.
+    destruct H2.
+    eapply H1.
+    + apply H2.
+    + apply E_IfFalse; auto.
+      unfold bassn in H4.
+      destruct (beval st1 b); auto.
+      congruence.
+Qed.
+
+Lemma hoare_while_complete:
+  forall fc lf fp P Q c b,
+  (forall P Q : Assertion, valid fc lf ({{P}} c {{Q}}) -> provable fc lf fp ({{P}} c {{Q}})) ->
+  valid fc lf ({{P}} While b Do c EndWhile {{Q}}) ->
+  provable fc lf fp ({{P}} While b Do c EndWhile {{Q}}).
+Proof.
+  unfold valid, triple_valid.
+  intros.
+  remember (fun (st:state) => exists st0, P st0 /\ while_sem b (ceval fc lf c) st0 st) as I.
+  apply hoare_consequence with I (fun st => I st /\ not (bassn b st)).
+  - subst.
+    unfold derives.
+    intros.
+    exists st.
+    split; auto.
+    apply rt_refl.
+  - eapply hoare_while.
+    subst.
+    apply H.
+    intros.
+    destruct H1 as [[st0 [? ?]] ?].
+    exists st0.
+    split; auto.
+    apply Operators_Properties.clos_rt_rtn1_iff in H3.
+    apply Operators_Properties.clos_rt_rtn1_iff.
+    apply rtn1_trans with st1; auto.
+    split; auto.
+  - subst.
+    unfold derives.
+    intros.
+    destruct H1 as [[st0 [? ?]] ?].
+    eapply H0; [apply H1 |].
+    clear H1.
+    apply Operators_Properties.clos_rt_rt1n_iff in H2.
+    induction H2.
+    + apply E_WhileFalse; auto.
+      unfold bassn in H3.
+      destruct (beval x b); auto.
+      congruence.
+    + specialize (IHclos_refl_trans_1n H3).
+      destruct H1.
+      apply E_WhileTrue with y; auto.
+Qed.
+
 Lemma hoare_triple_complete: forall fc lf fp tr,
   valid fc lf tr ->
   fp = (fun (f : func) (P Q : Assertion) => valid fc lf ({{P}} func_bdy f {{Q}})) ->
@@ -876,15 +1163,17 @@ Lemma hoare_triple_complete: forall fc lf fp tr,
 Proof.
   intros.
   destruct tr.
-  induction c.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
+  revert dependent Q.
+  revert P.
+  induction c; intros.
+  - apply hoare_skip_complete; auto.
+  - apply hoare_assn_complete; auto.
+  - apply hoare_seq_complete; auto.
+  - apply hoare_if_complete; auto.
+  - apply hoare_while_complete; auto.
   - apply hoare_call_complete; auto.
   - apply hoare_reentry_complete; auto.
-Admitted.
+Qed.
 
 Theorem hoare_complete: forall fc lf tr,
   valid fc lf tr ->
