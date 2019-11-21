@@ -137,38 +137,3 @@ with arbitrary_eval: forall (fc: func_context) (lf: list func) (loc : unit_state
                 arbitrary_eval fc lf loc gl2 gl3 ->
                 arbitrary_eval fc lf loc gl1 gl3.
 (** [] *)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

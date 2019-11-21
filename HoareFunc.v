@@ -30,38 +30,6 @@ Definition while_sem_1n b loop_body : state -> state -> Prop :=
 Definition while_sem_n1 b loop_body : state -> state -> Prop :=
   clos_refl_trans_n1 (while_body_sem b loop_body).
 
-(* Fixpoint iter_loop_body'_1n  (n : nat): state -> state -> Prop :=
-  match n with
-  | O => fun st1 st2 => st1 = st2
-  | S n' => fun st1 st3 => exists st2, iter_loop_body'_1n b loop_body n' st2 st3 /\ loop_body st1 st2 /\ beval st1 b = true
-  end.
-
-Fixpoint iter_loop_body'_n1 (b : bexp) (loop_body : state -> state -> Prop) (n : nat): state -> state -> Prop :=
-  match n with
-  | O => fun st1 st2 => st1 = st2
-  | S n' => fun st1 st3 => exists st2, iter_loop_body'_n1 b loop_body n' st1 st2 /\ loop_body st2 st3 /\ beval st2 b = true
-  end. *)
-
-
-(* ceval' sigma c st1 st2
-
-sg n
-0 => _ _ _ => False
-S n => ceval' (sg n)
-
-sigma
-exists n, sg n
-
-ceval' sigma <-> ceval *)
-
-(* Inductive arbitrary_eval' (sigma: func_context -> public_funcs -> com -> state -> state -> Prop) (fc: func_context) (lf: public_funcs): unit_state -> unit_state -> unit_state -> Prop :=
-  | ArE'_nil: forall loc gl, arbitrary_eval' sigma fc lf loc gl gl
-  | ArE'_cons: forall loc loc1 loc2 gl1 gl2 gl3 f,
-      In f lf ->
-      sigma fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) ->
-      arbitrary_eval' sigma fc lf loc gl2 gl3 ->
-      arbitrary_eval' sigma fc lf loc gl1 gl3. *)
-
 Definition semantic : Type := func_context -> public_funcs -> com -> state -> state -> Prop.
 
 Inductive ceval' (sigma : semantic) (fc : func_context) (lf : public_funcs) : com -> state -> state -> Prop :=
@@ -318,36 +286,6 @@ Proof.
         ++ apply IHarbitrary_eval'.
 Qed.
 
-(* Lemma ceval_sg_n fc lf: forall c st1 st2,
-  ceval fc lf c st1 st2 ->
-  exists n, sg n fc lf c st1 st2.
-Proof.
-  intros.
-  induction H.
-  - exists 1; simpl.
-    apply E'_Skip.
-  - exists 1; simpl.
-    apply E'_Ass; auto.
-  - destruct IHceval1 as [n1 ?].
-    destruct IHceval2 as [n2 ?].
-    admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - induction H.
-    + exists 1; simpl.
-      apply E'_Reentry.
-      apply ArE'_nil.
-    + destruct IHarbitrary_eval as [n ?].
-      admit.
-Abort. *)
-
-(* Fact pass' : False. Admitted.
-Ltac pass := pose proof pass' as Htest; inversion Htest. *)
-
-(* One way does not work *)
 Lemma ceval'_ceval (fc: func_context) (lf: public_funcs) (c: com) (st1 st2: state) :
   ceval' sigma fc lf c st1 st2 -> ceval fc lf c st1 st2.
 Proof.
@@ -508,11 +446,6 @@ Definition fp_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) (f
 (*     fp f P Q -> P st1 -> ceval fc lf (func_bdy f) st1 st2 -> Q st2. *)
     fp f P Q -> triple_valid sigma fc lf ({{P}} (func_bdy f) {{Q}}).
 Notation "sigma fc lf ||== fp" := (fp_valid sigma fc lf fp) (at level 91, no associativity).
-(* delta f P Q -> delta |== P f Q *)
-
-(*
-  sg n |= delta -> P st1 -> ceval' (sg n) c st1 st2 -> Q st2
-*)
 
 (** Weak Valid *)
 Definition weak_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) (fp : func_predicate) (tr : hoare_triple) : Prop :=
@@ -520,7 +453,6 @@ Definition weak_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) 
   triple_valid (ceval' sigma) fc lf tr.
 Notation "sigma fc lf fp |== tr" := (weak_valid sigma fc lf fp tr) (at level 91, no associativity).
 End HoareLogic.
-
 
 (** Soundness *)
 Module Soundness.
@@ -774,11 +706,6 @@ End Soundness.
 
 Module abevals.
 
-(*
-  Import HoareLogic here may cause trouble!!!
-  Why???
-*)
-
 Definition reCall_semantic fc lf : unit_state -> unit_state -> Prop :=
   fun glb1 glb2 => exists f pv loc,
     In f lf /\
@@ -822,26 +749,6 @@ Proof.
   rewrite <- Operators_Properties.clos_rt_rtn1_iff.
   tauto.
 Qed.
-
-(* Inductive arbitrary_eval_trans: forall (fc: func_context) (lf: public_funcs) (loc : unit_state), unit_state -> unit_state -> Prop :=
-  | ArE_step: 
-  ceval fc lf (CCall f pv) (loc, gl2) (loc, gl3) ->
-  | ArE_refl: forall fc lf loc gl,
-      arbitrary_eval_n1 fc lf loc gl gl
-  | ArE_trans: forall fc lf loc pv gl1 gl2 gl3 f,
-      In f lf ->
-      arbitrary_eval_n1 fc lf loc gl1 gl2 ->
-      ceval fc lf (CCall f pv) (loc, gl2) (loc, gl3) ->
-      arbitrary_eval_n1 fc lf loc gl1 gl3. *)
-
-(* Inductive arbitrary_eval_n1 (fc: func_context) (lf: public_funcs) : unit_state -> unit_state -> unit_state -> Prop :=
-  | ArE_nil_n1 : forall loc glb, arbitrary_eval_n1 fc lf loc glb glb
-  | ArE_cons_n1 : 
-  | ArE_cons_n1 : forall loc pv glb1 glb2 glb3 f, False
-     In f lf. ->
-     arbitrary_eval_n1 fc lf loc glb1 glb2 ->
-     ceval fc lf (CCall f pv) (loc, glb2) (loc, glb3) ->
-     arbitrary_eval_n1 fc lf loc glb1 glb3. *)
 End abevals.
 
 (** Completeness *)
@@ -926,39 +833,6 @@ Proof.
     - apply E_Reentry.
       apply H2.
 Qed.
-
-(* Lemma undo_P2A_existence : forall fc f prms P,
-  exists P', pv_to_assertion fc f prms P' = P.
-Proof.
-  intros.
-  unfold pv_to_assertion.
-  remember (func_arg f) as args.
-  clear Heqargs.
-  remember (rev args) as rargs.
-  apply eq_sym in Heqrargs.
-  revert dependent args.
-  revert prms.
-  induction rargs; intros.
-  - destruct args.
-    + simpl.
-      exists P.
-      apply functional_extensionality.
-      destruct x.
-      auto.
-    + pose proof eq_refl (length (rev (i :: args))).
-      rewrite Heqrargs in H at 1.
-      simpl in H. rewrite app_length in H.
-      simpl in H. omega.
-  - Search rev.
-    assert (rev (a :: rargs) = args).
-    {
-      rewrite <- Heqrargs.
-      apply rev_involutive.
-    }
-    clear Heqrargs.
-    simpl in H.
-(*     specialize (IHrargs (rev rargs) (rev_involutive _)) as [P' ?]. *)
-Abort. *)
 
 Lemma hoare_call_complete: forall fc lf fp f prms P Q,
   valid fc lf ({{P}} f [(prms)] {{Q}}) ->
@@ -1198,4 +1072,7 @@ Qed.
 End Completeness.
 (** [] *)
 
-
+Import Soundness.
+Import Completeness.
+Print Assumptions hoare_sound.
+Print Assumptions hoare_complete.

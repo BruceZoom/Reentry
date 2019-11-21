@@ -147,7 +147,7 @@ Ltac destruct_rev stk :=
 
 
 (** Definition of basic ceval' *)
-(* Calling stacks are ordered top-down, i.e. inner call state at stack top *)
+(* Calling stacks are ordered top-down, i.e. outer call state at stack top *)
 (* label calling stack *)
 Definition lbstk : Type := list label.
 (* local calling stack *)
@@ -177,13 +177,9 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
         (com_to_label_pure (func_bdy f) :: nil) (bstk ++ l2 :: nil)
         (param_to_local_state (loc1, glb1) (func_arg f) pv :: nil, glb1)
         (sstk ++ loc2 :: nil, glb2) ->
-(** Might be equivalent to
-        ((l2, loc2) :: stk) glb1 glb2 -> *)
       ceval' fc (CCall f pv)
         (LPure :: nil) (LHere :: bstk ++ l2 :: nil)
         (loc1 :: nil, glb1) (loc1 :: sstk ++ loc2 :: nil, glb2)
-(** Might be equivalent to
-        ((LPure, loc) :: nil) ((LHere, loc) :: (l2, loc2) :: stk) glb1 glb2 *)
   | E'_CallRet : forall fc f pv l1 loc loc1 loc2 glb1 glb2 bstk sstk,
       single_point l1 ->
       length bstk = length sstk ->
@@ -217,8 +213,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
       is_pure l2 ->
       is_pure l3 ->
       valid_label l4 ->
-(*       1 + length bstk1 = length sstk1 ->
-      1 + length bstk2 = length sstk2 -> *)
       ceval' fc c1
         (l1 :: bstk1) (l2 :: nil)
         st1 st ->
@@ -230,8 +224,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_Seq1 : forall fc c1 c2 l1 l2 bstk1 bstk2 st1 st2,
       valid_label l1 ->
       single_point l2 ->
-(*       1 + length bstk1 = length sstk1 ->
-      1 + length bstk2 = length sstk2 -> *)
       ceval' fc c1
         (l1 :: bstk1) (l2 :: bstk2)
         st1 st2 ->
@@ -241,8 +233,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_Seq2 : forall fc c1 c2 l1 l2 bstk1 bstk2 st1 st2,
       single_point l1 ->
       valid_label l2 ->
-(*       1 + length bstk1 = length sstk1 ->
-      1 + length bstk2 = length sstk2 -> *)
       ceval' fc c2
         (l1 :: bstk1) (l2 :: bstk2)
         st1 st2 ->
@@ -265,7 +255,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_IfFalse : forall fc b c1 c2 l1 l2 loc1 glb1 st2 bstk,
       is_pure l1 ->
       valid_label l2 ->
-(*       1 + length bstk = length sstk -> *)
       beval (loc1, glb1) b = false ->
       ceval' fc c2
         (l1 :: nil) (l2 :: bstk)
@@ -277,8 +266,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_If1 : forall fc b c1 c2 l1 l2 bstk1 bstk2 st1 st2,
       single_point l1 ->
       valid_label l2 ->
-(*       1 + length bstk1 = length sstk1 ->
-      1 + length bstk2 = length sstk2 -> *)
       ceval' fc c1
         (l1 :: bstk1) (l2 :: bstk2) st1 st2 ->
       ceval' fc (CIf b c1 c2)
@@ -287,8 +274,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_If2 : forall fc b c1 c2 l1 l2 bstk1 bstk2 st1 st2,
       single_point l1 ->
       valid_label l2 ->
-(*       1 + length bstk1 = length sstk1 ->
-      1 + length bstk2 = length sstk2 -> *)
       ceval' fc c2
         (l1 :: bstk1) (l2 :: bstk2) st1 st2 ->
       ceval' fc (CIf b c1 c2)
@@ -304,7 +289,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_WhileTrue1 : forall fc b c l1 l2 loc1 glb1 st2 bstk,
       is_pure l1 ->
       single_point l2 ->
-(*       1 + length bstk = length sstk -> *)
       beval (loc1, glb1) b = true ->
       ceval' fc c
         (l1 :: nil) (l2 :: bstk)
@@ -315,7 +299,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_WhileTrue2 : forall fc b c l1 l2 loc1 glb1 bstk st1 st2,
       is_pure l1 ->
       valid_label l2 ->
-(*       1 + length bstk = length sstk -> *)
       beval (loc1, glb1) b = true ->
       ceval' fc c
         ((com_to_label_pure c) :: nil)
@@ -330,8 +313,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_WhileSeg1 : forall fc b c l1 l2 bstk1 bstk2 st1 st2,
       single_point l1 ->
       single_point l2 ->
-(*       1 + length bstk1 = length sstk1 ->
-      1 + length bstk2 = length sstk2 -> *)
       ceval' fc c
         (l1 :: bstk1) (l2 :: bstk2) st1 st2 ->
       ceval' fc (CWhile b c)
@@ -339,8 +320,6 @@ Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> 
   | E'_WhileSeg2 : forall fc b c l1 l2 bstk1 bstk2 st1 st2 st3,
       single_point l1 ->
       valid_label l2 ->
-(*       1 + length bstk1 = length sstk1 ->
-      1 + length bstk2 = length sstk2 -> *)
       ceval' fc c
         (l1 :: bstk1) ((com_to_label_pure c) :: nil) st1 st3 ->
       ceval' fc (CWhile b c)
@@ -1791,26 +1770,6 @@ Proof.
         pose proof H9 as Htmp1.
         apply ceval'_valid_label_left in Htmp1.
         (* l1 constructed *)
-        (* construct l2' *)
-        
-        (* remember (bstk2 ++ l2 :: nil) as bstk2'.
-        destruct bstk2' as [| l2' ?]; [inversion Htmp4 |].
-        assert (valid_label l2') as Htmp2.
-        {
-          destruct bstk2; inversion Heqbstk2'; subst.
-          - right. auto.
-          - apply ceval'_valid_label_right in H14.
-            auto.
-        }
-        pose proof E'_Seq _ _ _ _ _ _ _ _ _ _ _ _ _ _ Htmp1 (com_to_label_pure_is_pure _) (com_to_label_pure_is_pure _) Htmp2 Htmp3 Htmp4 H9 H14. (* clear Htmp1 Htmp2 Htmp3 Htmp4. *)
-        apply Operators_Properties.clos_rt1n_rt in H4.
-          inversion H2; subst.
-          {
-            eapply multi_ceval'_seq_head in H4; auto.
-            eapply rt_trans; [| exact H4].
-            replace (LSeq (com_to_label_pure c1) l2 :: nil) with (nil ++ LSeq (com_to_label_pure c1) l2 :: nil); auto.
-            apply rt_step, ME_r_single; auto. *)
-        
         destruct bstk2 as [| l2' bstk2].
         {
           assert (valid_label l2) as Htmp2; [right; auto |].

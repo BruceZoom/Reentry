@@ -81,38 +81,8 @@ Proof.
   exact H4.
 Qed.
 
-(* Lemma ceval_deterministic : forall fc c st1 st2 st3,
-  ceval fc c st1 st2 ->
-  ceval fc c st1 st3 ->
-  st2 = st3.
-Proof.
-  intros. revert H0. revert st3.
-  induction H; intros.
-  - inversion H0. auto.
-  - inversion H0; subst. auto.
-  - inversion H1; subst.
-    apply IHceval1 in H5.
-    apply IHceval2. rewrite H5.
-    apply H8.
-  - inversion H1; subst.
-    + apply IHceval. apply H9.
-    + congruence.
-  - inversion H1; subst.
-    + congruence.
-    + apply IHceval. apply H9.
-  - inversion H0; subst; [auto | congruence].
-  - inversion H2; subst; [congruence |].
-    apply IHceval2.
-    apply IHceval1 in H7.
-    rewrite H7. apply H10.
-  - inversion H0; subst.
-    destruct H. destruct H7.
-    (* No inductive hypothesis ?! *)
-    admit.
-  - admit.
-(*  - admit.*)
-Admitted. *)
-
+(* dummy version of the Reentry Rule *)
+(* The final version is in HoareFunc.v *)
 Theorem hoare_reentry : forall fc lf P I,
   localp P ->
   globalp I ->
@@ -139,55 +109,3 @@ Proof.
     exact H10.
 Qed.
 (** [] *)
-
-(** Attempt halt & unroll *)
-(*
-  remember (CReentry lf) as c.
-  induction H2; inversion Heqc; subst.
-  - exact H3.
-  - unfold andp in *.
-    destruct H3.
-    split; [eapply H; apply H3 | ].
-    destruct H2 as [f [? [glb3 [pv [? ?]]]]].
-    specialize (H4 f pv H2).
-    destruct H4.
-    {
-      pose proof ceval_deterministic _ _ _ _ _ H4 H7.
-      congruence.
-    }
-    destruct H4 as [glb3' [? ?]].
-    pose proof ceval_deterministic _ _ _ _ _ H4 H7.
-    inversion H9; subst; clear H9.
-    pose proof H1 f pv H2 _ _ H4 H5.
-    (* No inductive hypothesis ?! *)
-(** [] *)
-Admitted.
-*)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

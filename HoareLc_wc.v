@@ -93,17 +93,6 @@ Fixpoint matched_lbstk (fc: func_context) (bstk: lbstk) (c: com) : Prop :=
       end
   end.
 
-(* Fixpoint matched_lbstk (fc: func_context) (bstk: lbstk) (c: com) : Prop :=
-  match bstk with
-  | nil => True
-  | lb :: bstk => single_point lb /\ matched_label lb c /\
-      match bstk, (retrieve_func lb c) with
-      | nil, None => True
-      | _, Some f => matched_lbstk fc bstk (func_bdy f)
-      | _, None => False
-      end
-  end. *)
-
 Definition valid_index_label (fc : func_context) (c : com) (bstk : lbstk) : Prop :=
   length bstk > 0 /\ matched_lbstk fc bstk c.
 
@@ -179,49 +168,6 @@ Definition func_triple' (fc : func_context) (f : func) (P Q : Assertion') (R1 R2
  /\ triple_PR fc f P Q R1 R2
  /\ triple_RQ fc f P Q R1 R2
  /\ triple_RR fc f P Q R1 R2.
-
-(* Inductive reachable_param (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (R : index_relation fc (f :: lf) pt) : restk -> forall (i : index_set fc (f :: lf)), (pt i) -> Prop :=
-  | RP_single : forall st i x,
-      fname _ _ i = f ->
-      reachable_param fc lf f pt R ((func_bdy f, Some (proj1_sig (index_label _ _ i)), st) :: nil) i x
-  | RP_multi : forall st1 st2 i j x y stk,
-      In (fname _ _ j) lf ->
-      R i j x y ->
-      reachable_param fc lf f pt R ((func_bdy (fname _ _ i), Some (proj1_sig (index_label _ _ i)), st1) :: stk) i x ->
-      reachable_param fc lf f pt R ((func_bdy (fname _ _ j), Some (proj1_sig (index_label _ _ j)), st2) :: (func_bdy (fname _ _ i), Some (proj1_sig (index_label _ _ i)), st1) :: stk) j y.
-
-Lemma reachable_param_head : 
-  forall fc lf f pt R p stk i x,
-  reachable_param fc lf f pt R (p :: stk) i x ->
-  exists st, p = (func_bdy (fname _ _ i), Some (proj1_sig (index_label _ _ i)), st).
-Proof.
-  intros.
-  inversion H; subst.
-  - exists st.
-    destruct i.
-    simpl in *.
-    subst. auto.
-  - exists st2.
-    auto.
-Qed.
-
-Lemma reachable_param_state :
-  forall fc lf f pt R c l st1 stk i x st2,
-  reachable_param fc lf f pt R ((c, l, st1) :: stk) i x ->
-  reachable_param fc lf f pt R ((c, l, st2) :: stk) i x.
-Proof.
-  intros.
-  remember ((c, l, st1) :: stk) as stk'.
-  induction H; subst.
-  - inversion Heqstk'; subst.
-    apply RP_single.
-    exact H.
-  - inversion Heqstk'; subst.
-    eapply RP_multi.
-    exact H.
-    exact H0.
-    exact H1.
-Qed. *)
 
 Fixpoint stk_loc_R (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) i x : Prop :=
   match stk with
@@ -1009,10 +955,6 @@ Proof.
       * auto.
     (* From middle to tail *)
     + destruct H6 as [? [i [x [? [? [? [? [? ?]]]]]]]]. subst c.
-      (* Utilize information in reachable_param *)
-      (* remember ((func_bdy (fname fc (f :: lf) i), Some (l :: l1), st1) :: (cp, Some (lp :: plstk), stp) :: stk) as stk'.
-      induction H5; subst; inversion Heqstk'; subst.
-      clear IHreachable_param. *)
       (* Construct index and parameter *)
       simpl.
       exists j, y.
@@ -1141,10 +1083,6 @@ Proof.
         repeat split; auto.
         right. split; auto.
         destruct H7 as [i [x [? [? [? [? [? ?]]]]]]]; subst.
-        (* Utilize information in reachable_param *)
-(*         remember ((@func_bdy fc (fname fc (f :: lf) i), @Some (list label) (l :: l1), st1) :: (func_bdy (fname fc (f :: lf) j), Some (lp :: plstk), stp) :: stk) as stk'.
-        induction H4; inversion Heqstk'; subst.
-        clear IHreachable_param. *)
         (* Prepare conditions *)
         assert (valid_index_label fc (func_bdy (fname fc (f :: lf) i)) (l0 :: nil)).
         {
@@ -1220,7 +1158,6 @@ Proof.
       {
         pose proof H10 as Hl2.
         apply ceval'_single_point_stack_right_t2b in Hl2; auto.
-        
         exists j, y.
         repeat split; auto.
         simpl.

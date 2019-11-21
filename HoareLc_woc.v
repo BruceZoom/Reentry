@@ -100,49 +100,6 @@ Definition func_triple' (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 
  /\ triple_RQ fc f P Q R1 R2
  /\ triple_RR fc f P Q R1 R2.
 
-(* Inductive reachable_param (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (R : index_relation fc (f :: lf) pt) : restk -> forall (i : index_set fc (f :: lf)), (pt i) -> Prop :=
-  | RP_single : forall st i x,
-      fname _ _ i = f ->
-      reachable_param fc lf f pt R ((func_bdy f, Some (proj1_sig (index_label _ _ i)), st) :: nil) i x
-  | RP_multi : forall st1 st2 i j x y stk,
-      In (fname _ _ j) lf ->
-      R i j x y ->
-      reachable_param fc lf f pt R ((func_bdy (fname _ _ i), Some (proj1_sig (index_label _ _ i)), st1) :: stk) i x ->
-      reachable_param fc lf f pt R ((func_bdy (fname _ _ j), Some (proj1_sig (index_label _ _ j)), st2) :: (func_bdy (fname _ _ i), Some (proj1_sig (index_label _ _ i)), st1) :: stk) j y.
-
-Lemma reachable_param_head : 
-  forall fc lf f pt R p stk i x,
-  reachable_param fc lf f pt R (p :: stk) i x ->
-  exists st, p = (func_bdy (fname _ _ i), Some (proj1_sig (index_label _ _ i)), st).
-Proof.
-  intros.
-  inversion H; subst.
-  - exists st.
-    destruct i.
-    simpl in *.
-    subst. auto.
-  - exists st2.
-    auto.
-Qed.
-
-Lemma reachable_param_state :
-  forall fc lf f pt R c l st1 stk i x st2,
-  reachable_param fc lf f pt R ((c, l, st1) :: stk) i x ->
-  reachable_param fc lf f pt R ((c, l, st2) :: stk) i x.
-Proof.
-  intros.
-  remember ((c, l, st1) :: stk) as stk'.
-  induction H; subst.
-  - inversion Heqstk'; subst.
-    apply RP_single.
-    exact H.
-  - inversion Heqstk'; subst.
-    eapply RP_multi.
-    exact H.
-    exact H0.
-    exact H1.
-Qed. *)
-
 Fixpoint stk_loc_R (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) i x : Prop :=
   match stk with
   | nil => f = fname _ _ i
@@ -171,7 +128,6 @@ Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : para
         (single_point l1 /\ exists i x,   (* bottom level reentry *)
           c1 = func_bdy (fname _ _ i) /\
           l1 = proj1_sig (index_label _ _ i) /\
-(*           reachable_param fc lf f pt R ((c1, Some l1, st1) :: stk') i x /\ *)
           f = fname _ _ i /\ invs i x st1 /\ loc_R i x st1)
       | None => Q st1                     (* bottom level tail *)
       end
@@ -194,27 +150,6 @@ Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : para
     | _ => False
     end
   end.
-
-(* Inductive stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion): forall (stk : restk), Prop :=
-| stk_to_pre_bottom_level_head: forall st,
-    P st ->
-    stk_to_pre fc lf f pt invs R P Q ((func_bdy f, Some (com_to_label_pure (func_bdy f)), st) :: nil)
-| stk_to_pre_bottom_level_tail: forall st,
-    Q st ->
-    stk_to_pre fc lf f pt invs R P Q ((func_bdy f, None, st) :: nil)
-| stk_to_pre_upper_level_head: forall c st stk i x,
-    invs i x st ->
-    reachable_param fc lf f pt R stk i x ->
-    stk_to_pre fc lf f pt invs R P Q ((c, Some (com_to_label_pure c), st) :: stk)
-| stk_to_pre_upper_level_tail: forall c st stk i x,
-    invs i x st ->
-    reachable_param fc lf f pt R stk i x ->
-    stk_to_pre fc lf f pt invs R P Q ((c, None, st) :: stk)
-| stk_to_pre_reentry: forall c l st stk i x,
-    single_point (proj1_sig (index_label _ _ i)) ->
-    invs i x st ->
-    reachable_param fc lf f pt R ((c, l, st) :: stk) i x ->
-    stk_to_pre fc lf f pt invs R P Q ((c, l, st) :: stk). *)
 
 Fixpoint get_bottom_com (stk : restk) : com :=
   match stk with
@@ -726,20 +661,6 @@ Proof.
     apply com_to_label_pure_is_pure.
     exact H2.
   }
-  (* All non-bottom com have a corresponding f' in lf *)
-  (* This condition CANNOT be removed! It is used in 2 cases where stk_to_pre condition describe the transition from a lower level to the head of upper level, where reachable_param does not provide any information about the upper level. *)
-  (* assert (forall c l st p stk' stk'',
-            stk1 = stk' ++ p :: stk'' ->
-            In (c, l, st) stk' ->
-            exists f', In f' lf /\ c = (func_bdy f')) as Hctop.
-  {
-    intros.
-    rewrite H4 in Heqstk1.
-    apply app_eq_unit in Heqstk1.
-    destruct Heqstk1.
-    destruct H6. subst. inversion H5.
-    destruct H6. inversion H7.
-  } *)
   remember (func_bdy f, Some (com_to_label_pure (func_bdy f)), st1) as p'.
   assert (multi_ceval' fc lf (p' :: nil) stk1) as Hfront.
   {
