@@ -117,6 +117,9 @@ Definition A'2A (P: Assertion') : Assertion :=
 Definition globalp' (P: Assertion') : Prop :=
   forall sstk1 sstk2 glb, P (sstk1, glb) -> P (sstk2, glb).
 
+Definition localp' (P: Assertion') : Prop :=
+  forall sstk glb1 glb2, P (sstk, glb1) -> P (sstk, glb2).
+
 Module COM.
 Definition index_label_set (fc : func_context) (c : com) : Type :=
   sig (valid_index_label fc c).
@@ -220,7 +223,22 @@ Proof.
     exact H1.
 Qed.
 
-Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion') : Prop :=
+Fixpoint stk_loc_R (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) i x : Prop :=
+  match stk with
+  | nil => True
+  | (c1, l1, st1) :: stk' =>
+      match l1 with
+      | Some l1 =>
+        exists j y,
+          c1 = func_bdy (fname _ _ j) /\
+          l1 = proj1_sig (index_label _ _ j) /\
+          reachable_param fc lf f pt R stk j y /\ R j i y x /\
+          loc_R j y st1 /\ stk_loc_R fc lf f pt loc_R R stk' j y
+      | None => False
+      end
+  end.
+
+Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion') : Prop :=
   match stk with
   | nil => False                          (* empty stack *)
   | (c1, l1, st1) :: stk' =>
@@ -232,25 +250,29 @@ Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : para
         (single_point l1 /\ exists i x,   (* bottom level reentry *)
           c1 = func_bdy (fname _ _ i) /\
           (l1 :: bstk) = proj1_sig (index_label _ _ i) /\
-          reachable_param fc lf f pt R ((c1, Some (l1 :: bstk), st1) :: stk') i x /\
-          invs i x st1)
+          reachable_param fc lf f pt R ((c1, Some (l1 :: bstk), st1) :: stk') i x /\ invs i x st1 /\ loc_R i x st1)
       | None => Q st1                     (* bottom level tail *)
       | _ => False
       end
-    | _ =>                                (* during reentry *)
-      match l1 with
-      | Some (l1 :: bstk) =>
-        (is_pure l1 /\ exists i x,        (* current level head *)
-          reachable_param fc lf f pt R stk' i x /\ invs i x st1) \/
-        (single_point l1 /\ exists i x,   (* current level reentry *)
-          c1 = func_bdy (fname _ _ i) /\
-          (l1 :: bstk) = proj1_sig (index_label _ _ i) /\
-          reachable_param fc lf f pt R ((c1, Some (l1 :: bstk), st1) :: stk') i x /\
-          invs i x st1)
-      | None => exists i x,               (* current level tail *)
-        reachable_param fc lf f pt R stk' i x /\ invs i x st1
-      | _ => False
-      end
+    | (c2, Some (l2 :: bstk2), st2) :: stk'' =>   (* during reentry *)
+      exists j y,
+        stk_loc_R fc lf f pt loc_R R stk'' j y /\
+        c2 = func_bdy (fname _ _ j) /\
+        (l2 :: bstk2) = proj1_sig (index_label _ _ j) /\
+        reachable_param fc lf f pt R stk' j y /\
+        loc_R j y st2 /\
+        match l1 with
+        | Some (l1 :: bstk) =>
+          (is_pure l1 /\ invs j y st1) \/   (* current level head *)
+          (single_point l1 /\ exists i x,   (* current level reentry *)
+            c1 = func_bdy (fname _ _ i) /\
+            (l1 :: bstk) = proj1_sig (index_label _ _ i) /\
+            In (fname _ _ i) lf /\ R j i y x /\
+            invs i x st1 /\ loc_R i x st1)
+        | None => invs j y st1              (* current level tail *)
+        | _ => False
+        end
+    | _ => False
     end
   end.
 
@@ -750,19 +772,19 @@ Proof.
 Qed.
 
 Lemma reentry_bottom_level:
-  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion') (c : com) (l1 : lbstk) (l2 : option lbstk) (st1 st0 : state'),
+  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion') (c : com) (l1 : lbstk) (l2 : option lbstk) (st1 st0 : state'),
 
   (* Rule 2 *)
   (forall (invs' : FUN.rAssertion fc f),
     (invs' = fun j st =>
-        exists z, invs {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st) ->
+        exists z, invs {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st /\ loc_R {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st) ->
   func_triple' fc f P Q invs' invs') ->
 
   get_bottom_com ((c, Some l1, st1) :: nil) = func_bdy f ->
-  stk_to_pre fc lf f pt invs R ((c, Some l1, st1) :: nil) P Q ->
+  stk_to_pre fc lf f pt invs loc_R R ((c, Some l1, st1) :: nil) P Q ->
   middle_ceval' fc lf ((c, Some l1, st1) :: nil) ((c, l2, st0) :: nil) ->
 
-  stk_to_pre fc lf f pt invs R ((c, l2, st0) :: nil) P Q.
+  stk_to_pre fc lf f pt invs loc_R R ((c, l2, st0) :: nil) P Q.
 Proof.
   intros.
 (*   rename H0 into Hctop. *)
@@ -771,8 +793,9 @@ Proof.
   inversion H2; subst.
   - simpl in Hbt. subst c.
     pose proof H (fun (j : COM.index_label_set fc (func_bdy f)) (st : state') =>
-     exists z : pt {| fname := f; fvalid := in_eq f lf; index_label := j |},
-       invs {| fname := f; fvalid := in_eq f lf; index_label := j |} z st) eq_refl.
+      exists z : pt {| fname := f; fvalid := in_eq f lf; index_label := j |},
+        invs {| fname := f; fvalid := in_eq f lf; index_label := j |} z st /\
+        loc_R {| fname := f; fvalid := in_eq f lf; index_label := j |} z st) eq_refl.
     destruct l1; simpl in Hstk; destruct Hstk.
     + destruct H1.
       destruct H0 as [? _].
@@ -804,7 +827,10 @@ Proof.
       * replace (in_eq f lf) with fvalid0; [| apply proof_irrelevance].
         exists x. exact H7.
   - simpl in Hbt. subst.
-    pose proof H (fun (j : COM.index_label_set fc (func_bdy f)) (st : state') => exists z : pt {| fname := f; fvalid := in_eq f lf; index_label := j |}, invs {| fname := f; fvalid := in_eq f lf; index_label := j |} z st) eq_refl.
+    pose proof H (fun (j : COM.index_label_set fc (func_bdy f)) (st : state') =>
+      exists z : pt {| fname := f; fvalid := in_eq f lf; index_label := j |},
+        invs {| fname := f; fvalid := in_eq f lf; index_label := j |} z st /\
+        loc_R {| fname := f; fvalid := in_eq f lf; index_label := j |} z st) eq_refl.
     destruct l1; simpl in Hstk; destruct Hstk.
     + destruct H1.
       destruct bstk2; simpl.
@@ -826,7 +852,7 @@ Proof.
         simpl in *;
         subst.
         + specialize (H0 _ _ (exist _ (l0 :: nil) H4) H10 H3).
-          destruct H0.
+          destruct H0 as [? [? ?]].
           exists {|
           fname := f;
           fvalid := in_eq f lf;
@@ -859,7 +885,7 @@ Proof.
         simpl in *;
         subst.
         + specialize (H0 _ _ (exist _ ((l2 :: bstk2) ++ l0 :: nil) H6) H10 H3).
-          destruct H0.
+          destruct H0 as [? [? ?]].
           exists {|
           fname := f;
           fvalid := in_eq f lf;
@@ -889,7 +915,7 @@ Proof.
         }
         replace (l0 :: nil) with (proj1_sig (exist _ (l0 :: nil) H6)) in H10; auto.
         assert (exists z : pt {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |},
-    invs {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |} z st1).
+    invs {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |} z st1 /\ loc_R {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |} z st1).
         {
           replace (in_eq f lf) with fvalid0.
           exists x. auto.
@@ -897,7 +923,7 @@ Proof.
         }
         destruct H0 as [_ [_ [_ ?]]].
         specialize (H0 _ _ _ (exist _ (l0 :: nil) H6) H10 H8); clear H8.
-        destruct H0.
+        destruct H0 as [? [? ?]].
         exists {| fname := f; fvalid := in_eq f lf; index_label := exist (valid_index_label fc (func_bdy f)) (l0 :: nil) H6 |}, x0.
         (* Clear goals *)
         repeat split; auto.
@@ -921,7 +947,7 @@ Proof.
         }
         replace (l2 :: bstk2 ++ l0 :: nil) with (proj1_sig (exist _ (l2 :: bstk2 ++ l0 :: nil) H6)) in H10; auto.
         assert (exists z : pt {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |},
-    invs {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |} z st1).
+    invs {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |} z st1 /\ loc_R {| fname := f; fvalid := in_eq f lf; index_label := index_label0 |} z st1).
         {
           replace (in_eq f lf) with fvalid0.
           exists x. auto.
@@ -929,7 +955,7 @@ Proof.
         }
         destruct H0 as [_ [_ [_ ?]]].
         specialize (H0 _ _ _ (exist _ (l2 :: bstk2 ++ l0 :: nil) H6) H10 H8); clear H8.
-        destruct H0.
+        destruct H0 as [? [? ?]].
         exists {| fname := f; fvalid := in_eq f lf; index_label := exist (valid_index_label fc (func_bdy f)) (l2 :: bstk2 ++ l0 :: nil) H6 |}, x0.
         (* Clear goals *)
         repeat split; auto.
@@ -939,42 +965,50 @@ Proof.
 Qed.
 
 Lemma reentry_higher_level:
-  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion') (c : com) (l1 : lbstk) (l2 : option lbstk) (st1 st0 : state') p stk,
+  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion') (c : com) (l1 : lbstk) (l2 : option lbstk) (st1 st0 : state') p stk,
 
   (* Rule 1 *)
   (forall f' (Hin: In f' lf) (i: index_set fc (f :: lf)) (x: pt i) invs',
     (invs' = fun j st =>
         exists y, R i {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} x y 
-        /\ invs {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st) ->
+        /\ invs {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st /\ loc_R {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st) ->
   func_triple' fc f' (invs i x) (invs i x) invs' invs') ->
 
   (forall (c0 : com) (l : option lbstk) (st : state') (p0 : com * option lbstk * state') (stk' stk'' : restk),
     (c, Some l1, st1) :: p :: stk = stk' ++ p0 :: stk'' ->
     In (c0, l, st) stk' -> exists f' : func, In f' lf /\ c0 = func_bdy f') ->
-  stk_to_pre fc lf f pt invs R ((c, Some l1, st1) :: p :: stk) P Q ->
+  stk_to_pre fc lf f pt invs loc_R R ((c, Some l1, st1) :: p :: stk) P Q ->
   middle_ceval' fc lf ((c, Some l1, st1) :: p :: stk) ((c, l2, st0) :: p :: stk) ->
 
-  stk_to_pre fc lf f pt invs R ((c, l2, st0) :: p :: stk) P Q.
+  stk_to_pre fc lf f pt invs loc_R R ((c, l2, st0) :: p :: stk) P Q.
 Proof.
   intros.
   rename H0 into Hctop.
   rename H1 into Hstk.
+  destruct p as [[cp lp] stp].
+  destruct lp; [| inversion Hstk].
+  destruct l as [| lp plstk]; [inversion Hstk |].
   inversion H2; subst.
   (* Transition in higher level, from some point to the end *)
   - simpl in Hstk.
-    destruct l1; destruct Hstk.
+    destruct Hstk as [j [y [? [? [? [? [? ?]]]]]]].
+    destruct l1; destruct H7.
     (* From head to tail *)
-    + destruct H0 as [? [? [? [? ?]]]].
-      pose proof Hctop c (Some (l :: l1)) st1 p ((c, Some (l :: l1), st1)::nil) stk (eq_refl _) (in_eq _ _) as [f' [? ?]]. subst.
+    + destruct H7.
+      pose proof Hctop c (Some (l :: l1)) st1 (cp, Some (lp :: plstk), stp) ((c, Some (l :: l1), st1)::nil) stk (eq_refl _) (in_eq _ _) as [f' [? ?]].
+      subst.
       (* Construct index and parameter *)
-      exists x, x0.
-      split. auto.
+      exists j, y.
+      repeat split; auto.
       (* Apply hoare rule, select PQ to use *)
-      pose proof H f' H5 x x0
-        (fun (j : FUN.index_label_set fc f') (st : state') =>
-          exists y : pt {| fname := f'; fvalid := in_cons f f' lf H5; index_label := j |}, R x {| fname := f'; fvalid := in_cons f f' lf H5; index_label := j |} x0 y /\ invs {| fname := f'; fvalid := in_cons f f' lf H5; index_label := j |} y st) (eq_refl _) as [? _].
-      eapply H6.
-      * rewrite (ceval'_pure_head _ _ _ _ _ _ _ H0 H4) in H4.
+      pose proof H f' H9 j y
+        (fun (j0 : FUN.index_label_set fc f') (st : state') =>
+      exists y0 : pt {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |},
+        R j {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |} y y0 /\
+        invs {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |} y0 st /\
+        loc_R {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |} y0 st) (eq_refl _) as [? _].
+      eapply H1.
+      * rewrite (ceval'_pure_head _ _ _ _ _ _ _ H7 H4) in H4.
         remember (rev l1) as l';
         pose proof rev_involutive l1 as Hrev;
         rewrite <- Heql' in Hrev;
@@ -989,214 +1023,305 @@ Proof.
           pose proof com_to_label_pure_no_point (func_bdy f').
           congruence.
         }
-      * exact H3.
+      * auto.
     (* From middle to tail *)
-    + destruct H0 as [? [? [? [? [? [? ?]]]]]]. subst c.
+    + destruct H7 as [? [i [x [? [? [? [? [? ?]]]]]]]]. subst c.
       (* Utilize information in reachable_param *)
-      remember ((func_bdy (fname fc (f :: lf) x), Some (l :: l1), st1) :: p :: stk) as stk'.
+      (* remember ((func_bdy (fname fc (f :: lf) i), Some (l :: l1), st1) :: (cp, Some (lp :: plstk), stp) :: stk) as stk'.
       induction H5; subst; inversion Heqstk'; subst.
-      clear IHreachable_param.
+      clear IHreachable_param. *)
       (* Construct index and parameter *)
-      exists i, x.
-      split; auto.
+      simpl.
+      exists j, y.
+      repeat split; auto.
       (* Apply hoare rule, select RQ to use *)
-      pose proof H (fname fc (f :: lf) j) H1 i x (fun (j0 : FUN.index_label_set fc (fname fc (f :: lf) j)) (st : state') =>
-exists y : pt {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |},
-  R i {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |} x y /\
-  invs {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |} y st) (eq_refl _) as [_ [_ [? _]]].
+      pose proof H (fname fc (f :: lf) i) H10 j y (fun (j0 : FUN.index_label_set fc (fname fc (f :: lf) i)) (st : state') =>
+      exists
+        y0 : pt
+               {|
+               fname := fname fc (f :: lf) i;
+               fvalid := in_cons f (fname fc (f :: lf) i) lf H10;
+               index_label := j0 |},
+        R j
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H10;
+          index_label := j0 |} y y0 /\
+        invs
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H10;
+          index_label := j0 |} y0 st /\
+        loc_R
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H10;
+          index_label := j0 |} y0 st) (eq_refl _) as [_ [_ [? _]]].
       eapply H8; clear H8.
-      rewrite <- H3.
-      apply H4.
-      replace {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |} with j.
-      exists y. tauto.
-      destruct j. f_equal.
-      apply proof_irrelevance.
+      * rewrite <- H9.
+        apply H4.
+      * replace{|
+        fname := fname fc (f :: lf) i;
+        fvalid := in_cons f (fname fc (f :: lf) i) lf H10;
+        index_label := index_label fc (f :: lf) i |} with i.
+        -- exists x.
+           tauto.
+        -- destruct i.
+           simpl. f_equal.
+           apply proof_irrelevance.
   (* Transition within higher level, from some point to one reentry point *)
-  - destruct l1; destruct Hstk.
+  - simpl in Hstk.
+    destruct Hstk as [j [y [? [? [? [? [? ?]]]]]]].
+    destruct l1; destruct H7.
     (* From head to middle *)
-    + destruct bstk2.
+    + destruct H7.
+      destruct bstk2.
       {
-        destruct H0 as [? [? [? [? ?]]]].
+        exists j, y.
+        repeat split; auto.
+        simpl.
+        right; split; auto.
+        pose proof Hctop c (Some (l :: l1)) st1 (cp, Some (lp :: plstk), stp) ((c, Some (l :: l1), st1)::nil) stk (eq_refl _) (in_eq _ _) as [f' [? ?]]. subst.
         remember (rev l1) as l';
         pose proof rev_involutive l1 as Hrev;
         rewrite <- Heql' in Hrev;
         destruct l';
         subst; [|
           apply ceval'_single_point_stack_left_bottom in H10;
-          apply pure_no_point in H0;
+          apply pure_no_point in H7;
           congruence].
-        right. split. assumption.
-        pose proof Hctop c (Some (l :: nil)) st1 p ((c, Some (l :: nil), st1)::nil) stk (eq_refl _) (in_eq _ _) as [f' [? ?]]. subst.
         (* Prepare conditions *)
-        rewrite (ceval'_pure_head _ _ _ _ _ _ _ H0 H10) in H10.
+        rewrite (ceval'_pure_head _ _ _ _ _ _ _ H7 H10) in H10.
         assert (valid_index_label fc (func_bdy f') (l0 :: nil)).
         {
           split.
           - simpl. omega.
           - apply ceval'_matched_lbstk_right in H10; auto.
         }
-        pose proof H f' H4 x x0 (fun (j : FUN.index_label_set fc f') (st : state') =>
-        exists y : pt {| fname := f'; fvalid := in_cons f f' lf H4; index_label := j |},
-          R x {| fname := f'; fvalid := in_cons f f' lf H4; index_label := j |} x0 y /\
-          invs {| fname := f'; fvalid := in_cons f f' lf H4; index_label := j |} y st) (eq_refl _) as [_ [? _]].
-        specialize (H7 _ _ (exist _ (l0::nil) H6) H10 H3).
-        destruct H7 as [y [? ?]].
-        exists {| fname := f'; fvalid := in_cons f f' lf H4; index_label := exist (valid_index_label fc (func_bdy f')) (l0 :: nil) H6 |}, y.
-        (* Clear goals *)
+        pose proof H f' H9 j y (fun (j0 : FUN.index_label_set fc f') (st : state') =>
+       exists y0 : pt {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |},
+         R j {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |} y y0 /\
+         invs {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |} y0 st /\
+         loc_R {| fname := f'; fvalid := in_cons f f' lf H9; index_label := j0 |} y0 st) (eq_refl _) as [_ [? _]].
+        specialize (H11 _ _ (exist _ (l0::nil) H1) H10 H8).
+        destruct H11 as [x [? [? ?]]].
+        exists {|
+          fname := f';
+          fvalid := in_cons f f' lf H9;
+          index_label := exist (valid_index_label fc (func_bdy f')) (l0 :: nil) H1 |}, x.
         repeat split; auto.
-        replace ((func_bdy f'), Some (l0 :: nil), st0) with ((func_bdy (fname _ _ {| fname := f'; fvalid := in_cons f f' lf H4; index_label := exist (valid_index_label fc (func_bdy f')) (l0 :: nil) H6 |})),Some (proj1_sig (index_label _ _ {| fname := f'; fvalid := in_cons f f' lf H4; index_label := exist (valid_index_label fc (func_bdy f')) (l0 :: nil) H6 |})), st0); auto.
-        pose proof reachable_param_head _ _ _ _ _ _ _ _ _ H1 as [st ?]; subst.
-        eapply RP_multi; auto.
-        + exact H7.
-        + auto.
       }
       {
-        destruct H0 as [? [? [? [? ?]]]].
+        simpl.
+        exists j, y.
+        repeat split; auto.
+        pose proof ceval'_single_point_stack_right_t2b _ _ _ _ _ _ _ _ H5 H10.
+        right; split; auto.
         remember (rev l1) as l';
         pose proof rev_involutive l1 as Hrev;
         rewrite <- Heql' in Hrev;
         destruct l';
         subst; [|
           apply ceval'_single_point_stack_left_bottom in H10;
-          apply pure_no_point in H0;
+          apply pure_no_point in H7;
           congruence].
-        pose proof H10 as Hl2.
-        apply ceval'_single_point_stack_right_t2b in Hl2; auto.
-        right. split; auto.
-        pose proof Hctop c (Some (l :: nil)) st1 p ((c, Some (l :: nil), st1)::nil) stk (eq_refl _) (in_eq _ _) as [f' [? ?]]. subst.
+        pose proof Hctop c (Some (l :: nil)) st1 (func_bdy (fname fc (f :: lf) j), Some (lp :: plstk), stp) ((c, Some (l :: nil), st1)::nil) stk (eq_refl _) (in_eq _ _) as [f' [? ?]]. subst.
         (* Prepare conditions *)
-        rewrite (ceval'_pure_head _ _ _ _ _ _ _ H0 H10) in H10.
+        rewrite (ceval'_pure_head _ _ _ _ _ _ _ H7 H10) in H10.
         assert (valid_index_label fc (func_bdy f') ((l2 :: bstk2) ++ l0 :: nil)).
         {
           split.
           - simpl. omega.
           - apply ceval'_matched_lbstk_right in H10; auto.
         }
-        pose proof H f' H4 x x0 (fun (j : FUN.index_label_set fc f') (st : state') =>
-        exists y : pt {| fname := f'; fvalid := in_cons f f' lf H4; index_label := j |},
-          R x {| fname := f'; fvalid := in_cons f f' lf H4; index_label := j |} x0 y /\
-          invs {| fname := f'; fvalid := in_cons f f' lf H4; index_label := j |} y st) (eq_refl _) as [_ [? _]].
-        specialize (H7 _ _ (exist _ ((l2 :: bstk2) ++ l0 :: nil) H6) H10 H3).
-        destruct H7 as [y [? ?]].
-        exists {| fname := f'; fvalid := in_cons f f' lf H4; index_label := exist (valid_index_label fc (func_bdy f')) ((l2 :: bstk2) ++ l0 :: nil) H6 |}, y.
+        pose proof H f' H1 j y (fun (j0 : FUN.index_label_set fc f') (st : state') =>
+       exists y0 : pt {| fname := f'; fvalid := in_cons f f' lf H1; index_label := j0 |},
+         R j {| fname := f'; fvalid := in_cons f f' lf H1; index_label := j0 |} y y0 /\
+         invs {| fname := f'; fvalid := in_cons f f' lf H1; index_label := j0 |} y0 st /\
+         loc_R {| fname := f'; fvalid := in_cons f f' lf H1; index_label := j0 |} y0 st) (eq_refl _) as [_ [? _]].
+        specialize (H12 _ _ (exist _ ((l2 :: bstk2) ++ l0 :: nil) H11) H10 H8).
+        destruct H12 as [x [? [? ?]]].
+        exists {|
+        fname := f';
+        fvalid := in_cons f f' lf H1;
+        index_label := exist (valid_index_label fc (func_bdy f'))
+                         ((l2 :: bstk2) ++ l0 :: nil) H11 |}, x.
         (* Clear goals *)
         repeat split; auto.
-        replace ((func_bdy f'), Some ((l2 :: bstk2) ++ l0 :: nil), st0) with ((func_bdy (fname _ _ {| fname := f'; fvalid := in_cons f f' lf H4; index_label := exist (valid_index_label fc (func_bdy f')) ((l2 :: bstk2) ++ l0 :: nil) H6 |})),Some (proj1_sig (index_label _ _ {| fname := f'; fvalid := in_cons f f' lf H4; index_label := exist (valid_index_label fc (func_bdy f')) ((l2 :: bstk2) ++ l0 :: nil) H6 |})), st0); auto.
-        pose proof reachable_param_head _ _ _ _ _ _ _ _ _ H1 as [st ?]; subst.
-        eapply RP_multi; auto.
-        + exact H7.
-        + auto.
       }
     (* From middle to middle *)
-    + destruct bstk2.
+    + destruct H7.
+      destruct bstk2.
       {
+        simpl.
+        exists j, y.
+        repeat split; auto.
         right. split; auto.
-        destruct H0 as [? [? [? [? [? [? ?]]]]]]; subst.
+        destruct H8 as [i [x [? [? [? [? [? ?]]]]]]]; subst.
         (* Utilize information in reachable_param *)
-        remember ((@func_bdy fc (fname fc (f :: lf) x), @Some (list label) (l :: l1), st1) :: p :: stk) as stk'.
+(*         remember ((@func_bdy fc (fname fc (f :: lf) i), @Some (list label) (l :: l1), st1) :: (func_bdy (fname fc (f :: lf) j), Some (lp :: plstk), stp) :: stk) as stk'.
         induction H4; inversion Heqstk'; subst.
-        clear IHreachable_param.
+        clear IHreachable_param. *)
         (* Prepare conditions *)
-        assert (valid_index_label fc (func_bdy (fname fc (f :: lf) j)) (l0 :: nil)).
+        assert (valid_index_label fc (func_bdy (fname fc (f :: lf) i)) (l0 :: nil)).
         {
           split.
           + simpl. omega.
           + apply ceval'_matched_lbstk_right in H10; auto.
         }
-        assert (exists y : pt {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |},
-     R i {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |} x y /\
-     invs {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |} y st1).
+        
+        pose proof H (fname fc (f :: lf) i) H11 j y (fun (j0 : FUN.index_label_set fc (fname fc (f :: lf) i)) (st : state') =>
+      exists
+        y0 : pt
+               {|
+               fname := fname fc (f :: lf) i;
+               fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+               index_label := j0 |},
+        R j
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := j0 |} y y0 /\
+        invs
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := j0 |} y0 st /\
+        loc_R
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := j0 |} y0 st) (eq_refl _) as [_ [_ [_ ?]]].
+        unfold triple_RR in H8.
+        
+        assert (exists
+        y0 : pt
+               {|
+               fname := fname fc (f :: lf) i;
+               fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+               index_label := index_label fc (f :: lf) i |},
+        R j
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := index_label fc (f :: lf) i |} y y0 /\
+        invs
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := index_label fc (f :: lf) i |} y0 st1 /\
+        loc_R
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := index_label fc (f :: lf) i |} y0 st1).
         {
-          replace {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |} with j.
-          exists y. tauto.
-          destruct j. simpl.
-          replace (in_cons f fname0 lf H1) with fvalid0.
-          auto. apply proof_irrelevance.
+          replace {|
+           fname := fname fc (f :: lf) i;
+           fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+           index_label := index_label fc (f :: lf) i |} with i.
+           2:{
+            destruct i.
+            f_equal. apply proof_irrelevance.
+           }
+           exists x.
+           tauto.
         }
-        (* Apply hoare rule to construct index and parameter, select RR to use *)
-        pose proof H (fname fc (f :: lf) j) H1 i x (fun (j0 : FUN.index_label_set fc (fname fc (f :: lf) j)) (st : state') =>
-   exists y : pt {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |},
-     R i {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |} x y /\
-     invs {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |} y st) (eq_refl _) as [_ [_ [_ ?]]].
-        rewrite H3 in *.
-        specialize (H12 _ _ _ (exist _ (l0 :: nil) H8) H10 H11); clear H11.
-        destruct H12 as [? [? ?]].
+        rewrite H9 in *.
+        specialize (H8 _ _ _ (exist _ (l0 :: nil) H1) H10 H15); clear H15.
+        destruct H8 as [x0 [? [? ?]]].
         exists {|
-         fname := fname fc (f :: lf) j;
-         fvalid := in_cons f (fname fc (f :: lf) j) lf H1;
-         index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) j))) (l0 :: nil) H8 |}, x0.
-        (* Clear goals *)
-        repeat split.
-        + replace (func_bdy (fname fc (f :: lf) j), Some (l0::nil), st0) with (func_bdy (fname fc (f :: lf) {|
-  fname := fname fc (f :: lf) j;
-  fvalid := in_cons f (fname fc (f :: lf) j) lf H1;
-  index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) j)))
-                   (l0 :: nil) H8 |}), Some (proj1_sig (index_label _ _ ({|
-  fname := fname fc (f :: lf) j;
-  fvalid := in_cons f (fname fc (f :: lf) j) lf H1;
-  index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) j)))
-                   (l0 :: nil) H8 |}))), st0); auto.
-          eapply RP_multi; auto.
-          * apply H11.
-          * auto.
-        + auto.
+        fname := fname fc (f :: lf) i;
+        fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+        index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) i))) (l0 :: nil) H1 |}, x0.
+        simpl.
+        repeat split; auto.
       }
       {
         pose proof H10 as Hl2.
         apply ceval'_single_point_stack_right_t2b in Hl2; auto.
+        
+        exists j, y.
+        repeat split; auto.
+        simpl.
         right. split; auto.
-        destruct H0 as [? [? [? [? [? [? ?]]]]]]; subst.
-        (* Utilize information in reachable_param *)
-        remember ((@func_bdy fc (fname fc (f :: lf) x), @Some (list label) (l :: l1), st1) :: p :: stk) as stk'.
-        induction H4; inversion Heqstk'; subst.
-        clear IHreachable_param.
+        destruct H8 as [i [x [? [? [? [? [? ?]]]]]]]; subst.
         (* Prepare conditions *)
-        assert (valid_index_label fc (func_bdy (fname fc (f :: lf) j)) ((l2 :: bstk2) ++ l0 :: nil)).
+        assert (valid_index_label fc (func_bdy (fname fc (f :: lf) i)) ((l2 :: bstk2) ++ l0 :: nil)).
         {
           split.
           + simpl. omega.
           + apply ceval'_matched_lbstk_right in H10; auto.
         }
-        assert (exists y : pt {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |},
-     R i {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |} x y /\
-     invs {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |} y st1).
+        
+        pose proof H (fname fc (f :: lf) i) H11 j y (fun (j0 : FUN.index_label_set fc (fname fc (f :: lf) i)) (st : state') =>
+      exists
+        y0 : pt
+               {|
+               fname := fname fc (f :: lf) i;
+               fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+               index_label := j0 |},
+        R j
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := j0 |} y y0 /\
+        invs
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := j0 |} y0 st /\
+        loc_R
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := j0 |} y0 st) (eq_refl _) as [_ [_ [_ ?]]].
+        
+        assert (exists
+        y0 : pt
+               {|
+               fname := fname fc (f :: lf) i;
+               fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+               index_label := index_label fc (f :: lf) i |},
+        R j
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := index_label fc (f :: lf) i |} y y0 /\
+        invs
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := index_label fc (f :: lf) i |} y0 st1 /\
+        loc_R
+          {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := index_label fc (f :: lf) i |} y0 st1).
         {
-          replace {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := index_label fc (f :: lf) j |} with j.
-          exists y. tauto.
-          destruct j. simpl.
-          replace (in_cons f fname0 lf H1) with fvalid0.
-          auto. apply proof_irrelevance.
+          replace {|
+          fname := fname fc (f :: lf) i;
+          fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+          index_label := index_label fc (f :: lf) i |} with i.
+          2:{
+            destruct i.
+            f_equal. apply proof_irrelevance.
+          }
+          exists x.
+          repeat split; auto.
         }
-        (* Apply hoare rule to construct index and parameter, select RR to use *)
-        pose proof H (fname fc (f :: lf) j) H1 i x (fun (j0 : FUN.index_label_set fc (fname fc (f :: lf) j)) (st : state') =>
-   exists y : pt {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |},
-     R i {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |} x y /\
-     invs {| fname := fname fc (f :: lf) j; fvalid := in_cons f (fname fc (f :: lf) j) lf H1; index_label := j0 |} y st) (eq_refl _) as [_ [_ [_ ?]]].
-        rewrite H3 in *.
-        specialize (H12 _ _ _ (exist _ ((l2 :: bstk2) ++ l0 :: nil) H8) H10 H11); clear H11.
-        destruct H12 as [? [? ?]].
+        
+        rewrite H9 in *.
+        specialize (H8 _ _ _ (exist _ ((l2 :: bstk2) ++ l0 :: nil) H1) H10 H15); clear H15.
+        destruct H8 as [x0 [? [? ?]]].
         exists {|
-         fname := fname fc (f :: lf) j;
-         fvalid := in_cons f (fname fc (f :: lf) j) lf H1;
-         index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) j))) ((l2 :: bstk2) ++ l0 :: nil) H8 |}, x0.
-        (* Clear goals *)
-        repeat split.
-        + replace (func_bdy (fname fc (f :: lf) j), Some ((l2 :: bstk2) ++ l0 :: nil), st0) with (func_bdy (fname fc (f :: lf) {|
-  fname := fname fc (f :: lf) j;
-  fvalid := in_cons f (fname fc (f :: lf) j) lf H1;
-  index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) j)))
-                   ((l2 :: bstk2) ++ l0 :: nil) H8 |}), Some (proj1_sig (index_label _ _ ({|
-  fname := fname fc (f :: lf) j;
-  fvalid := in_cons f (fname fc (f :: lf) j) lf H1;
-  index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) j)))
-                   ((l2 :: bstk2) ++ l0 :: nil) H8 |}))), st0); auto.
-          eapply RP_multi; auto.
-          * apply H11.
-          * auto.
-        + auto.
+        fname := fname fc (f :: lf) i;
+        fvalid := in_cons f (fname fc (f :: lf) i) lf H11;
+        index_label := exist (valid_index_label fc (func_bdy (fname fc (f :: lf) i))) ((l2 :: bstk2) ++ l0 :: nil) H1 |}, x0.
+        repeat split; auto.
       }
   - pose proof eq_refl (length stk).
-    rewrite <- H12 in H0 at 1.
+    rewrite <- H14 in H0 at 1.
     simpl in H0. omega.
 Qed.
 
@@ -1352,21 +1477,21 @@ Proof.
 Qed.
 
 Theorem reentry_invariant :
-  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion'),
+  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion'),
 
-  (forall i x, globalp' (invs i x)) ->
+  (forall i x, globalp' (invs i x) /\ localp' (loc_R i x)) ->
 
   (* Rule 1 *)
   (forall f' (Hin: In f' lf) (i: index_set fc (f :: lf)) (x: pt i) invs',
     (invs' = fun j st =>
         exists y, R i {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} x y 
-        /\ invs {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st) ->
+        /\ invs {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st /\ loc_R {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st) ->
   func_triple' fc f' (invs i x) (invs i x) invs' invs') ->
 
   (* Rule 2 *)
   (forall (invs' : FUN.rAssertion fc f),
     (invs' = fun j st =>
-        exists z, invs {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st) ->
+        exists z, invs {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st /\ loc_R {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st) ->
   func_triple' fc f P Q invs' invs') ->
 
   func_triple fc lf (A'2A P) f (A'2A Q).
@@ -1383,7 +1508,7 @@ Proof.
   apply ceval_multi_ceval' in H1.
   remember ((func_bdy f, Some ((com_to_label_pure (func_bdy f)) :: nil), (loc1 :: nil, glb1)) :: nil) as stk1.
   (* Generalized precondition *)
-  assert (stk_to_pre fc lf f pt invs R stk1 P Q).
+  assert (stk_to_pre fc lf f pt invs loc_R R stk1 P Q).
   {
     subst. simpl.
     left.
@@ -1459,40 +1584,6 @@ Proof.
       apply IHclos_refl_trans_1n; clear IHclos_refl_trans_1n.
       (* Transition from lower level to upper level *)
       - destruct stk.
-          (* (destruct bstk;[
-            simpl in *;
-            destruct H3;[
-              destruct H3;
-              pose proof pure_no_point l1 H3;
-              congruence |
-              left; split;[
-                apply com_to_label_pure_is_pure |
-                destruct H3 as [_ [? [? [? [? [? ?]]]]]];
-                subst; exists x, x0;
-                split; [auto |
-                eapply Ginv;
-                exact H9]]] |
-            assert (single_point l);[
-              destruct p';
-              destruct p;
-              destruct o; inversion Hp'lbstk; subst;
-              eapply multi_ceval'_left_bottom_single_point; [
-              exact H6 |
-              change ((c1, Some ((l :: bstk) ++ l1 :: nil), (sstk, glb)) :: nil) with (nil ++ (c1, Some ((l :: bstk) ++ l1 :: nil), (sstk, glb)) :: nil) in Hfront;
-              exact Hfront]
-            |
-            simpl in *;
-            destruct H3;[
-              destruct H3;
-              pose proof pure_no_point l H3;
-              congruence |
-              left; split;[
-                apply com_to_label_pure_is_pure |
-                destruct H3 as [_ [? [? [? [? [? ?]]]]]];
-                subst; exists x, x0;
-                split; [auto |
-                eapply Ginv;
-                exact H10]]]]]). *)
         + destruct bstk.
           {
             simpl in *.
@@ -1500,12 +1591,12 @@ Proof.
             - destruct H3.
               pose proof pure_no_point l1 H3.
               congruence.
-            - left; split.
+            - destruct H3 as [_ [i [x [? [? [? [? ?]]]]]]].
+              exists i, x.
+              repeat split; auto.
+              left; split.
               * apply com_to_label_pure_is_pure.
-              * destruct H3 as [_ [? [? [? [? [? ?]]]]]].
-                subst; exists x, x0.
-                split; auto.
-                eapply Ginv.
+              * eapply Ginv.
                 exact H9.
           }
           {
@@ -1524,52 +1615,64 @@ Proof.
             - destruct H3.
               pose proof pure_no_point l H3.
               congruence.
-            - left; split.
+            - destruct H3 as [_ [i [x [? [? [? [? ?]]]]]]].
+              exists i, x.
+              repeat split; auto.
+              left; split.
               * apply com_to_label_pure_is_pure.
-              * destruct H3 as [_ [? [? [? [? [? ?]]]]]].
-                subst; exists x, x0.
-                split; auto.
-                eapply Ginv.
+              * eapply Ginv.
                 exact H10.
           }
-        + destruct bstk.
+        + destruct p as [[cp lp] stp].
+          destruct lp; [| inversion H3].
+          destruct l as [| lp plstk]; [inversion H3 |].
+          destruct bstk.
           {
             simpl in *.
-            destruct H3.
-            - destruct H3.
-              pose proof pure_no_point l1 H3.
+            destruct H3 as [j [y [? [? [? [? [? ?]]]]]]].
+            destruct H11.
+            - destruct H11.
+              pose proof pure_no_point l1 H11.
               congruence.
-            - left; split.
-              * apply com_to_label_pure_is_pure.
-              * destruct H3 as [_ [? [? [? [? [? ?]]]]]].
-                subst; exists x, x0.
-                split; auto.
-                eapply Ginv.
-                exact H9.
+            - destruct H11 as [_ [i [x [? [? [? [? [? ?]]]]]]]].
+              exists i, x.
+              repeat split; auto.
+              * exists j, y.
+                repeat split; auto.
+              * rewrite H12 in *.
+                rewrite H8 in *.
+                subst.
+                apply RP_multi with y; auto.
+              * left; split; [apply com_to_label_pure_is_pure |].
+                eapply Ginv. apply H15.
           }
           {
             assert (single_point l).
             {
-              destruct p'.
-              destruct p0.
-              destruct o; inversion Hp'lbstk; subst.
+              destruct p' as [[cp' lp'] stp'].
+              destruct lp'; inversion Hp'lbstk; subst.
               eapply multi_ceval'_left_bottom_bottom_single_point.
               exact H6.
-              change ((c1, Some ((l :: bstk) ++ l1 :: nil), (sstk, glb)) :: p :: stk) with (nil ++ (c1, Some ((l :: bstk) ++ l1 :: nil), (sstk, glb)) :: p :: stk) in Hfront.
+              change ((c1, Some ((l :: bstk) ++ l1 :: nil), (sstk, glb)) :: (cp, Some (lp :: plstk), stp) :: stk) with (nil ++ (c1, Some ((l :: bstk) ++ l1 :: nil), (sstk, glb)) :: (cp, Some (lp :: plstk), stp) :: stk) in Hfront.
               exact Hfront.
             }
             simpl in *.
-            destruct H3.
-            - destruct H3.
-              pose proof pure_no_point l H3.
+            destruct H3 as [j [y [? [? [? [? [? ?]]]]]]].
+            destruct H12.
+            - destruct H12.
+              pose proof pure_no_point l H12.
               congruence.
-            - left; split.
-              * apply com_to_label_pure_is_pure.
-              * destruct H3 as [_ [? [? [? [? [? ?]]]]]].
-                subst; exists x, x0.
-                split; auto.
-                eapply Ginv.
-                exact H10.
+            - destruct H12 as [_ [i [x [? [? [? [? [? ?]]]]]]]].
+              exists i, x.
+              repeat split; auto.
+              * exists j, y.
+                repeat split; auto.
+              * rewrite H9 in *.
+                rewrite H13 in *.
+                subst.
+                apply RP_multi with y; auto.
+              * left; split; [apply com_to_label_pure_is_pure |].
+                eapply Ginv. apply H16.
           }
       - apply Operators_Properties.clos_rtn1_rt.
         eapply rtn1_trans.
@@ -1580,65 +1683,94 @@ Proof.
     {
       apply IHclos_refl_trans_1n; clear IHclos_refl_trans_1n.
       (* Transition from upper level to lower level *)
-      - destruct stk.
-        + simpl.
-          destruct H3 as [? [? [? ?]]].
-          pose proof reachable_param_head _ _ _ _ _ _ _ _ _ H3.
-          destruct H7; inversion H7; subst.
-          destruct bstk; simpl; right.
-          {
-            split; auto.
-            exists x, x0.
+      - simpl in H3.
+        destruct bstk.
+        {
+          simpl in *.
+          destruct H3 as [j [y [? [? [? [? [? ?]]]]]]].
+          destruct stk.
+          + right; split; auto.
+            exists j, y.
             repeat split; auto.
-            + eapply reachable_param_state.
-              apply H3.
-            + eapply Ginv.
-              exact H6.
-          }
-          {
-            split.
-            + destruct p', p.
-              simpl in Hp'lbstk; subst.
-              eapply multi_ceval'_left_bottom_bottom_single_point.
-              * exact H4.
-              * change ((c1, None, (loc :: nil, glb1)) :: (func_bdy (fname fc (f :: lf) x), Some ((l :: bstk) ++ l2 :: nil), (sstk, glb0)) :: nil) with (((c1, None, (loc :: nil, glb1)) :: nil) ++ (func_bdy (fname fc (f :: lf) x), Some ((l :: bstk) ++ l2 :: nil), (sstk, glb0)) :: nil) in Hfront.
-                exact Hfront.
-            + exists x, x0.
-              repeat split; auto.
-              * eapply reachable_param_state.
-                apply H3.
-              * eapply Ginv.
-                exact H6.
-          }
-        + simpl.
-          destruct H3 as [? [? [? ?]]].
-          pose proof reachable_param_head _ _ _ _ _ _ _ _ _ H3.
-          destruct H7; inversion H7; subst.
-          destruct bstk; simpl; right.
-          {
-            split; auto.
-            exists x, x0.
+            * eapply reachable_param_state.
+              apply H8.
+            * eapply Ginv.
+              apply H10.
+            * eapply Ginv.
+              apply H9.
+          + destruct p as [[cp lp] stp].
+            destruct lp; [| inversion H3].
+            destruct l as [| lp plstk].
+            {
+              simpl in H3.
+              destruct H3 as [i [x [? [? [? [? ?]]]]]].
+              destruct i.
+              simpl in H11.
+              destruct index_label0.
+              simpl in H11. subst.
+              unfold valid_index_label in v.
+              simpl in v. omega.
+            }
+            simpl in H3.
+            destruct H3 as [i [x [? [? [? [? [? ?]]]]]]].
+            exists i, x.
             repeat split; auto.
-            + eapply reachable_param_state.
-              apply H3.
-            + eapply Ginv.
-              exact H6.
-          }
+            right; split; auto.
+            exists j, y.
+            repeat split; auto.
+            * inversion H8; subst.
+              auto.
+            * eapply Ginv.
+              apply H10.
+            * eapply Ginv.
+              apply H9.
+        }
+        {
+          simpl in *.
+          destruct H3 as [j [y [? [? [? [? [? ?]]]]]]].
+          assert (single_point l).
           {
-            split.
-            + destruct p', p0.
-              simpl in Hp'lbstk; subst.
-              eapply multi_ceval'_left_bottom_bottom_single_point.
-              * exact H4.
-              * change ((c1, None, (loc :: nil, glb1)) :: (func_bdy (fname fc (f :: lf) x), Some ((l :: bstk) ++ l2 :: nil), (sstk, glb0)) :: p :: stk) with (((c1, None, (loc :: nil, glb1)) :: nil) ++ (func_bdy (fname fc (f :: lf) x), Some ((l :: bstk) ++ l2 :: nil), (sstk, glb0)) :: p :: stk) in Hfront.
-                exact Hfront.
-            + exists x, x0.
-              repeat split; auto.
-              * eapply reachable_param_state.
-                apply H3.
-              * eapply Ginv.
-                exact H6.
+            destruct j.
+            simpl in H7.
+            destruct index_label0.
+            simpl in H7. subst.
+            unfold valid_index_label in v.
+            destruct v as [? ?].
+            inversion m; subst.
+            auto.
           }
+          destruct stk.
+          + right; split; auto.
+            exists j, y.
+            repeat split; auto.
+            * eapply reachable_param_state.
+              apply H8.
+            * eapply Ginv. apply H10.
+            * eapply Ginv. apply H9.
+          + destruct p as [[cp lp] stp].
+            destruct lp; [| inversion H3].
+            destruct l0 as [| lp plstk].
+            {
+              simpl in H3.
+              destruct H3 as [i [x [? [? [? [? ?]]]]]].
+              destruct i.
+              simpl in H12.
+              destruct index_label0.
+              simpl in H12; subst.
+              unfold valid_index_label in v.
+              simpl in v. omega.
+            }
+            simpl in H3.
+            destruct H3 as [i [x [? [? [? [? [? ?]]]]]]].
+            exists i, x.
+            repeat split; auto.
+            right; split; auto.
+            exists j, y.
+            repeat split; auto.
+            * inversion H8; auto.
+            * eapply Ginv; apply H10.
+            * eapply Ginv; apply H9.
+        }
       - apply Operators_Properties.clos_rtn1_rt.
         eapply rtn1_trans.
         exact H1.
@@ -1646,5 +1778,3 @@ Proof.
         exact Hfront.
     }
 Qed.
-
-Print Assumptions reentry_invariant.
