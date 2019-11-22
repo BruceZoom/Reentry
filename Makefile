@@ -33,7 +33,7 @@ WithoutCall: \
 WithCall: \
 	.depend clean $(WithCall_FILES:%.v=WithCall/%.vo)
 
-all: $(FILES:%.v=%.vo)
+# all: $(FILES:%.v=%.vo)
 
 depend:
 	$(COQDEP) $(DEP_FLAG) $(FILES) > .depend

@@ -9,6 +9,10 @@ Arguments clos_refl_trans {A} _ _ _.
 Arguments clos_refl_trans_1n {A} _ _ _.
 Arguments clos_refl_trans_n1 {A} _ _ _.
 
+(**
+  DESIGN CHOICE:
+  WE PREFER "PURE-SINGLE LABEL" OVER "OPTION LABEL" WHEN IMPLEMENTING CEVAL' BECAUSE IN THIS WAY WE CAN EASILY OBTAIN "HEAD LABEL" AND "TAIL LABEL" OF ANY "COMPOSITIONAL COMMAND", OTHERWISE WE NEED TO DEVISE "TWO FUNCTIONS" TO FIND THOSE LABELS FOR "EVERY COMMAND COMPOSITION" WE ADD TO THE ABSTRACT SYNTAX TREE.
+*)
 
 (** Definitions about label *)
 Inductive label : Type :=
@@ -300,8 +304,7 @@ Inductive middle_ceval' : func_context -> public_funcs -> restk -> restk -> Prop
         ((c1, None, (loc1, glb1)) :: (c2, Some l2, (loc2, glb2)) :: stk)
         ((c2, Some l2, (loc2, glb1)) :: stk).
 
-Definition multi_ceval' (fc : func_context) (lf : public_funcs) : restk -> restk -> Prop :=
-  clos_refl_trans (middle_ceval' fc lf).
+Definition multi_ceval' (fc : func_context) (lf : public_funcs) : restk -> restk -> Prop := clos_refl_trans (middle_ceval' fc lf).
 
 Lemma middle_ceval'_some : forall fc c l1 l2 st1 st2 lf,
   middle_ceval' fc lf ((c, Some l1, st1) :: nil) ((c, Some l2, st2) :: nil) ->
@@ -365,6 +368,7 @@ Proof.
 Qed.
 (** [] *)
 
+(** Congruence Lemmas *)
 (** Seq Head *)
 Lemma middle_ceval'_seq_head1:
   forall l1 fc lf c2 st1 st2 stk c1,
@@ -1468,7 +1472,7 @@ Proof.
         apply middle_ceval'_elevate; assumption.
 Qed.
 (** Elevate *)
-
+(** [] *)
 
 Theorem ceval_multi_ceval' : forall fc lf c st1 st2,
     ceval fc lf c st1 st2 ->

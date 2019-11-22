@@ -114,20 +114,7 @@ Fixpoint param_to_local_state (st : state) (prm_name : list ident) (prm_value : 
   end.
 (** [] *)
 
-(** Reentry Completeness Support *)
-Fixpoint local_aexp (a : aexp) : Prop :=
-  match a with
-  | ANum _ => True
-  | AId X => match X with
-             | (false, _) => True
-             | _ => False
-             end
-  | APlus a1 a2 => (local_aexp a1) /\ (local_aexp a2)
-  | AMinus a1 a2 => (local_aexp a1) /\ (local_aexp a2)
-  | AMult a1 a2 => (local_aexp a1) /\ (local_aexp a2)
-end.
-
-(* Lemma used in reentry completeness to extract state before calling *)
+(** Lemma used in reentry completeness to extract state before calling *)
 Lemma undo_param_existence : forall loc glb pn,
   exists loc' pv,
     param_to_local_state (loc', glb) pn pv = loc.

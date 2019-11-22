@@ -9,6 +9,10 @@ Arguments clos_refl_trans {A} _ _ _.
 Arguments clos_refl_trans_1n {A} _ _ _.
 Arguments clos_refl_trans_n1 {A} _ _ _.
 
+(**
+  DESIGN CHOICE:
+  WE PREFER "PURE-SINGLE LABEL" OVER "OPTION LABEL" WHEN IMPLEMENTING CEVAL' BECAUSE IN THIS WAY WE CAN EASILY OBTAIN "HEAD LABEL" AND "TAIL LABEL" OF ANY "COMPOSITIONAL COMMAND", OTHERWISE WE NEED TO DEVISE "TWO FUNCTIONS" TO FIND THOSE LABELS FOR "EVERY COMMAND COMPOSITION" WE ADD TO THE ABSTRACT SYNTAX TREE.
+*)
 
 (** Definitions about label *)
 Inductive label : Type :=
@@ -117,7 +121,7 @@ Proof.
 Qed.
 (** [] *)
 
-(** Length Support? *)
+(** Length Support *)
 Lemma length_nil_app_cons {A : Type} : forall l a,
   @nil A = l ++ a :: nil -> False.
 Proof.
@@ -782,6 +786,7 @@ Proof.
 Qed.
 (** [] *)
 
+(** Congruence Lemmas *)
 Lemma middle_ceval'_seq_head_some:
   forall fc lf c1 c2 l1 l2 st1 st2 stk1 stk2 bstk,
   single_point l1 ->
@@ -1607,13 +1612,6 @@ Proof.
   - apply ME_ex; auto.
 Qed.
 
-Lemma cons_insert_nil {A: Type} :
-  forall (x : A) l, x :: l = (x :: nil) ++ l.
-Proof.
-  intros.
-  auto.
-Qed.
-
 Lemma multi_ceval'_elevate:
   forall fc lf c bstk1 bstk2 st1 st2 stk,
   multi_ceval' fc lf ((c, bstk1, st1) :: nil) ((c, bstk2, st2) :: nil) ->
@@ -1690,6 +1688,7 @@ Proof.
         apply rt_step. simpl.
         eapply ME_ex; auto.
 Qed.
+(** [] *)
 
 (** Denotational Sematics Relation *)
 Theorem ceval_multi_ceval' : forall fc lf c loc1 loc2 glb1 glb2,

@@ -384,7 +384,7 @@ End FixpointSigma.
 
 
 Module HoareLogic.
-Definition func_predicate : Type := func -> Assertion -> Assertion -> Prop.
+Definition func_assumption : Type := func -> Assertion -> Assertion -> Prop.
 
 Definition assn_sub (P : Assertion) (X : var) (a : aexp) : Assertion :=
   fun st => P (update_state st X (aeval st a)).
@@ -395,7 +395,7 @@ Inductive hoare_triple : Type :=
 Notation "{{ P }}  c  {{ Q }}" :=
   (Build_hoare_triple P c Q) (at level 90, c at next level).
 
-Inductive provable (fc : func_context) (lf : public_funcs) (fp : func_predicate) : hoare_triple -> Prop :=
+Inductive provable (fc : func_context) (lf : public_funcs) (fp : func_assumption) : hoare_triple -> Prop :=
   (* fixed reentry *)
   | hoare_reentry : forall A (P I: A -> Assertion),
     (forall x, localp (P x)) ->
@@ -441,13 +441,13 @@ Notation "sigma fc lf |== tr" := (triple_valid sigma fc lf tr) (at level 91, no 
 Definition valid (fc: func_context) (lf: public_funcs) (tr: hoare_triple) : Prop := triple_valid ceval fc lf tr.
 Notation "fc lf |== tr" := (valid fc lf tr) (at level 91, no associativity).
 
-Definition fp_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) (fp : func_predicate) : Prop :=
+Definition fp_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) (fp : func_assumption) : Prop :=
   forall f P Q,
     fp f P Q -> triple_valid sigma fc lf ({{P}} (func_bdy f) {{Q}}).
 Notation "sigma fc lf ||== fp" := (fp_valid sigma fc lf fp) (at level 91, no associativity).
 
 (** Weak Valid *)
-Definition weak_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) (fp : func_predicate) (tr : hoare_triple) : Prop :=
+Definition weak_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) (fp : func_assumption) (tr : hoare_triple) : Prop :=
   fp_valid sigma fc lf fp ->
   triple_valid (ceval' sigma) fc lf tr.
 Notation "sigma fc lf fp |== tr" := (weak_valid sigma fc lf fp tr) (at level 91, no associativity).
@@ -457,7 +457,7 @@ End HoareLogic.
 Module Soundness.
 Import HoareLogic.
 
-Lemma reentry_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma reentry_sound_weak sigma fc lf (fp: func_assumption) :
   forall A (P I: A -> Assertion),
   (forall x, localp (P x)) ->
   (forall x, globalp (I x)) ->
@@ -482,7 +482,7 @@ Proof.
   apply H5.
 Qed.
 
-Lemma call_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma call_sound_weak sigma fc lf (fp: func_assumption) :
   forall A f pv (Q P R : A -> Assertion),
   (forall x, fp f (P x) (Q x)) ->
   (forall x, globalp (Q x)) ->
@@ -504,7 +504,7 @@ Proof.
     apply H5.
 Qed.
 
-Lemma skip_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma skip_sound_weak sigma fc lf (fp: func_assumption) :
   forall P,
   weak_valid sigma fc lf fp ({{P}} CSkip {{P}}).
 Proof.
@@ -513,7 +513,7 @@ Proof.
   inversion H1; subst; auto.
 Qed.
 
-Lemma assgn_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma assgn_sound_weak sigma fc lf (fp: func_assumption) :
   forall P X E,
   weak_valid sigma fc lf fp ({{P [X |-> E] }} CAss X E {{P}}).
 Proof.
@@ -522,7 +522,7 @@ Proof.
   inversion H1; subst; auto.
 Qed.
 
-Lemma seq_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma seq_sound_weak sigma fc lf (fp: func_assumption) :
   forall P Q R c1 c2,
   weak_valid sigma fc lf fp ({{P}} c1 {{Q}}) ->
   weak_valid sigma fc lf fp ({{Q}} c2 {{R}}) ->
@@ -536,7 +536,7 @@ Proof.
   auto.
 Qed.
 
-Lemma if_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma if_sound_weak sigma fc lf (fp: func_assumption) :
   forall P b Q c1 c2,
   weak_valid sigma fc lf fp ({{P AND {[b]}}} c1 {{Q}}) ->
   weak_valid sigma fc lf fp ({{P AND NOT {[b]}}} c2 {{Q}}) ->
@@ -583,7 +583,7 @@ Proof.
       exists st2; split; auto.
 Qed.
 
-Lemma while_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma while_sound_weak sigma fc lf (fp: func_assumption) :
   forall P c b,
   weak_valid sigma fc lf fp ({{P AND {[b]}}} c {{P}}) ->
   weak_valid sigma fc lf fp ({{P}} While b Do c EndWhile {{P AND NOT {[b]}}}).
@@ -607,7 +607,7 @@ Proof.
     tauto.
 Qed.
 
-Lemma consequence_sound_weak sigma fc lf (fp: func_predicate) :
+Lemma consequence_sound_weak sigma fc lf (fp: func_assumption) :
   forall P Q P' Q' c,
   P |-- P' ->
   Q' |-- Q ->
@@ -641,7 +641,7 @@ Qed.
 
 Import FixpointSigma.
 
-Lemma sg_n_fp_valid : forall n fc lf (fp: func_predicate),
+Lemma sg_n_fp_valid : forall n fc lf (fp: func_assumption),
   (forall f P Q, fp f P Q ->
     provable fc lf fp ({{P}} (func_bdy f) {{Q}})) ->
   fp_valid (sg n) fc lf fp.
@@ -664,7 +664,7 @@ Proof.
     + apply H2.
 Qed.
 
-Lemma sigma_fp_valid : forall fc lf (fp: func_predicate),
+Lemma sigma_fp_valid : forall fc lf (fp: func_assumption),
   (forall f P Q, fp f P Q ->
     provable fc lf fp ({{P}} (func_bdy f) {{Q}})) ->
   fp_valid sigma fc lf fp.
@@ -682,7 +682,7 @@ Proof.
 Qed.
 
 (* (Delta P f Q -> Delta |-- P f Q) -> Delta |-- P c Q -> |== P c Q *)
-Theorem hoare_sound: forall fc lf (fp : func_predicate),
+Theorem hoare_sound: forall fc lf (fp : func_assumption),
   (forall f P Q, fp f P Q ->
       provable fc lf fp ({{P}} (func_bdy f) {{Q}})) ->
   forall tr, provable fc lf fp tr ->
@@ -1051,7 +1051,7 @@ Qed.
 
 Theorem hoare_complete: forall fc lf tr,
   valid fc lf tr ->
-  exists (fp: func_predicate),
+  exists (fp: func_assumption),
     (forall f P Q,fp f P Q ->
       provable fc lf fp ({{P}} (func_bdy f) {{Q}})) /\
     provable fc lf fp tr.
