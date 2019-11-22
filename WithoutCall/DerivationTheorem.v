@@ -1,7 +1,8 @@
+From Reentry Require Import DenotationalSemantics.
+From Reentry Require Import FineGrainedSemantics.
+
 Require Import Coq.Lists.List.
-Require Import AST_woc.
-Require Import ASTLc_woc.
-Require Import Hoare_woc.
+Require Import Omega.
 
 Require Import Coq.Relations.Relation_Operators.
 Require Import Coq.Relations.Relation_Definitions.
@@ -12,7 +13,67 @@ Arguments clos_refl_trans_n1 {A} _ _ _.
 Require Import FunctionalExtensionality.
 Require Import ProofIrrelevance.
 
-Require Import Omega.
+(** Assertion Language *)
+Module AssertionLanguage.
+Definition Assertion := state -> Prop.
+
+Definition derives (P Q: Assertion): Prop :=
+  forall st, P st -> Q st.
+
+Definition equiv_assert (P Q: Assertion): Prop :=
+  derives P Q /\ derives Q P.
+
+Definition bassn b : Assertion :=
+  fun st => (beval st b = true).
+
+Definition andp (P Q : Assertion) : Assertion :=
+  fun st => P st /\ Q st.
+
+Definition orp (P Q : Assertion) : Assertion :=
+  fun st => P st \/ Q st.
+
+Definition notp (P : Assertion) : Assertion :=
+  fun st => ~ (P st).
+
+Notation "P 'AND' Q" := (andp P Q) (at level 50, left associativity).
+Notation "P 'OR' Q" := (orp P Q) (at level 51, left associativity).
+Notation "'NOT' P" := (notp P) (at level 40).
+Notation "P '|--' Q" := (derives P Q) (at level 90, no associativity).
+Notation "P '--||--' Q" := (equiv_assert P Q) (at level 90, no associativity).
+Notation "{[ b ]}" := (bassn b) (at level 30, no associativity).
+
+Definition globalp (P : Assertion) : Prop :=
+  forall loc1 loc2 glb,
+    P (loc1, glb) -> P (loc2, glb).
+
+Definition localp (P : Assertion) : Prop :=
+  forall loc glb1 glb2,
+    P (loc, glb1) -> P (loc, glb2).
+
+Definition pv_to_assertion (fc : func_context) (f : func) (pv : list aexp) (P : Assertion) : Assertion :=
+  fun st => P (param_to_local_state st (func_arg f) pv, snd st).
+End AssertionLanguage.
+(** [] *)
+
+Import AssertionLanguage.
+
+Module CoarseGrainedJudgment.
+
+Definition hoare_triple (fc : func_context) (lf : public_funcs) (P : Assertion) (c : com) (Q : Assertion) : Prop :=
+  forall st1 st2,
+    ceval fc lf c st1 st2 ->
+    P st1 ->
+    Q st2.
+
+Definition func_triple (fc : func_context) (lf : public_funcs) (P : Assertion) (f : func) (Q : Assertion) : Prop :=
+  forall st1 st2,
+    ceval fc lf (func_bdy f) st1 st2 ->
+    P st1 ->
+    Q st2.
+
+End CoarseGrainedJudgment.
+
+Module FineGrainedJudgment.
 
 Definition top (fc : func_context) (f : func) : label :=
   com_to_label_pure (func_bdy f).
@@ -100,57 +161,13 @@ Definition func_triple' (fc : func_context) (f : func) (P Q : Assertion) (R1 R2 
  /\ triple_RQ fc f P Q R1 R2
  /\ triple_RR fc f P Q R1 R2.
 
-Fixpoint stk_loc_R (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) i x : Prop :=
-  match stk with
-  | nil => f = fname _ _ i
-  | (c1, l1, st1) :: stk' =>
-      In (fname _ _ i) lf /\
-      match l1 with
-      | Some l1 =>
-        exists j y,
-          c1 = func_bdy (fname _ _ j) /\
-          l1 = proj1_sig (index_label _ _ j) /\
-          R j i y x /\ loc_R j y st1 /\
-          stk_loc_R fc lf f pt loc_R R stk' j y
-      | None => False
-      end
-  end.
+End FineGrainedJudgment.
 
-Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion) : Prop :=
-  match stk with
-  | nil => False                          (* empty stack *)
-  | (c1, l1, st1) :: stk' =>
-    match stk' with
-    | nil =>                              (* only with bottom level *)
-      match l1 with
-      | Some l1 =>
-        (is_pure l1 /\ P st1) \/          (* bottom level head *)
-        (single_point l1 /\ exists i x,   (* bottom level reentry *)
-          c1 = func_bdy (fname _ _ i) /\
-          l1 = proj1_sig (index_label _ _ i) /\
-          f = fname _ _ i /\ invs i x st1 /\ loc_R i x st1)
-      | None => Q st1                     (* bottom level tail *)
-      end
-    | (c2, Some l2, st2) :: stk'' =>      (* during reentry *)
-      exists j y,
-        stk_loc_R fc lf f pt loc_R R stk'' j y /\
-        c2 = func_bdy (fname _ _ j) /\
-        l2 = proj1_sig (index_label _ _ j) /\
-        loc_R j y st2 /\
-        match l1 with
-        | Some l1 =>
-          (is_pure l1 /\ invs j y st1) \/   (* current level head *)
-          (single_point l1 /\ exists i x,   (* current level reentry *)
-            c1 = func_bdy (fname _ _ i) /\
-            l1 = proj1_sig (index_label _ _ i) /\
-            In (fname _ _ i) lf /\ R j i y x /\
-            invs i x st1 /\ loc_R i x st1)
-        | None => invs j y st1              (* current level tail *)
-        end
-    | _ => False
-    end
-  end.
+Module DerivationTheorem.
+Import CoarseGrainedJudgment.
+Import FineGrainedJudgment.
 
+(** Auxiliary Lemmas *)
 Fixpoint get_bottom_com (stk : restk) : com :=
   match stk with
   | nil => CSkip
@@ -258,7 +275,6 @@ Proof.
   exact IHceval'2.
 Qed.
 
-
 Lemma multi_ceval'_stack_bottom:
   forall fc lf stk1 f st,
     multi_ceval' fc lf stk1 ((func_bdy f, None, st) :: nil) ->
@@ -272,7 +288,123 @@ Proof.
   - specialize (IHclos_refl_trans_1n (eq_refl _)).
     inversion H; subst; destruct stk; exact IHclos_refl_trans_1n.
 Qed.
+(** [] *)
 
+(** Generalized Precondition *)
+Fixpoint stk_loc_R (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) i x : Prop :=
+  match stk with
+  | nil => f = fname _ _ i
+  | (c1, l1, st1) :: stk' =>
+      In (fname _ _ i) lf /\
+      match l1 with
+      | Some l1 =>
+        exists j y,
+          c1 = func_bdy (fname _ _ j) /\
+          l1 = proj1_sig (index_label _ _ j) /\
+          R j i y x /\ loc_R j y st1 /\
+          stk_loc_R fc lf f pt loc_R R stk' j y
+      | None => False
+      end
+  end.
+
+Definition stk_to_pre (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (stk : restk) (P Q : Assertion) : Prop :=
+  match stk with
+  | nil => False                          (* empty stack *)
+  | (c1, l1, st1) :: stk' =>
+    match stk' with
+    | nil =>                              (* only with bottom level *)
+      match l1 with
+      | Some l1 =>
+        (is_pure l1 /\ P st1) \/          (* bottom level head *)
+        (single_point l1 /\ exists i x,   (* bottom level reentry *)
+          c1 = func_bdy (fname _ _ i) /\
+          l1 = proj1_sig (index_label _ _ i) /\
+          f = fname _ _ i /\ invs i x st1 /\ loc_R i x st1)
+      | None => Q st1                     (* bottom level tail *)
+      end
+    | (c2, Some l2, st2) :: stk'' =>      (* during reentry *)
+      exists j y,
+        stk_loc_R fc lf f pt loc_R R stk'' j y /\
+        c2 = func_bdy (fname _ _ j) /\
+        l2 = proj1_sig (index_label _ _ j) /\
+        loc_R j y st2 /\
+        match l1 with
+        | Some l1 =>
+          (is_pure l1 /\ invs j y st1) \/   (* current level head *)
+          (single_point l1 /\ exists i x,   (* current level reentry *)
+            c1 = func_bdy (fname _ _ i) /\
+            l1 = proj1_sig (index_label _ _ i) /\
+            In (fname _ _ i) lf /\ R j i y x /\
+            invs i x st1 /\ loc_R i x st1)
+        | None => invs j y st1              (* current level tail *)
+        end
+    | _ => False
+    end
+  end.
+(** [] *)
+
+(** The non-bottom elements' functions are in white-list *)
+Lemma multi_ceval'_ctop :
+  forall fc lf stk1 c l st p0 p (stk' stk'' : restk),
+    multi_ceval' fc lf (p0 :: nil) stk1 ->
+    stk1 = stk' ++ p :: stk'' ->
+    In (c, l, st) stk' ->
+    exists f', In f' lf /\ c = (func_bdy f').
+Proof.
+  intros ? ? ? ? ? ? ? ? ? ? ?.
+  remember (p0 :: nil) as stk2.
+  apply Operators_Properties.clos_rt_rtn1 in H.
+  revert c l st p stk' stk''.
+  induction H; intros; subst.
+  - destruct stk'.
+    + inversion H0.
+    + pose proof eq_refl (length (p0 :: nil)).
+      rewrite H in H1 at 1.
+      rewrite app_length in H1.
+      simpl in H1. omega.
+  - inversion H; subst.
+    + destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c (Some l1) st1 p ((c, Some l1, st1) :: stk') stk'' eq_refl (in_eq _ _).
+        exact H2.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p ((c0, Some l1, st1) :: stk') stk'' eq_refl (in_cons _ _ _ H2).
+        exact H3.
+    + destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c (Some l1) st1 p ((c, Some l1, st1) :: stk') stk'' eq_refl (in_eq _ _).
+        exact H2.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p ((c0, Some l1, st1) :: stk') stk'' eq_refl (in_cons _ _ _ H2).
+        exact H4.
+    + remember ((c1, Some l1, (loc1, glb)) :: stk) as stk'''.
+      clear dependent stk.
+      rename stk''' into stk.
+      destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        exists f. tauto.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p stk' stk'' eq_refl H2.
+        exact H4.
+    + destruct stk'; [inversion H2 |].
+      destruct H2.
+      * inversion H2; subst.
+        inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c (Some l2) (loc2, glb2) p ((c1, None, (loc1, glb1)) :: (c, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_eq _ _)).
+        exact H2.
+      * inversion H1; subst.
+        pose proof IHclos_refl_trans_n1 c l st p ((c1, None, (loc1, glb1)) :: (c2, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_cons _ _ _ H2)).
+        exact H3.
+Qed.
+(** [] *)
+
+(** Reentrancy in the bottom level *)
 Lemma reentry_bottom_level:
   forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion) (c : com) (l1 : label) (l2 : option label) (st1 st0 : state),
 
@@ -372,7 +504,9 @@ Proof.
       (* Clear goals *)
       repeat split; auto.
 Qed.
+(** [] *)
 
+(** Reentrancy in the higher levels *)
 Lemma reentry_higher_level:
   forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion) (c : com) (l1 : label) (l2 : option label) (st1 st0 : state) p stk,
 
@@ -563,67 +697,10 @@ Proof.
     rewrite <- H12 in H0 at 1.
     simpl in H0. omega.
 Qed.
+(** [] *)
 
-Lemma multi_ceval'_ctop :
-  forall fc lf stk1 c l st p0 p (stk' stk'' : restk),
-    multi_ceval' fc lf (p0 :: nil) stk1 ->
-    stk1 = stk' ++ p :: stk'' ->
-    In (c, l, st) stk' ->
-    exists f', In f' lf /\ c = (func_bdy f').
-Proof.
-  intros ? ? ? ? ? ? ? ? ? ? ?.
-  remember (p0 :: nil) as stk2.
-  apply Operators_Properties.clos_rt_rtn1 in H.
-  revert c l st p stk' stk''.
-  induction H; intros; subst.
-  - destruct stk'.
-    + inversion H0.
-    + pose proof eq_refl (length (p0 :: nil)).
-      rewrite H in H1 at 1.
-      rewrite app_length in H1.
-      simpl in H1. omega.
-  - inversion H; subst.
-    + destruct stk'; [inversion H2 |].
-      destruct H2.
-      * inversion H2; subst.
-        inversion H1; subst.
-        pose proof IHclos_refl_trans_n1 c (Some l1) st1 p ((c, Some l1, st1) :: stk') stk'' eq_refl (in_eq _ _).
-        exact H2.
-      * inversion H1; subst.
-        pose proof IHclos_refl_trans_n1 c l st p ((c0, Some l1, st1) :: stk') stk'' eq_refl (in_cons _ _ _ H2).
-        exact H3.
-    + destruct stk'; [inversion H2 |].
-      destruct H2.
-      * inversion H2; subst.
-        inversion H1; subst.
-        pose proof IHclos_refl_trans_n1 c (Some l1) st1 p ((c, Some l1, st1) :: stk') stk'' eq_refl (in_eq _ _).
-        exact H2.
-      * inversion H1; subst.
-        pose proof IHclos_refl_trans_n1 c l st p ((c0, Some l1, st1) :: stk') stk'' eq_refl (in_cons _ _ _ H2).
-        exact H4.
-    + remember ((c1, Some l1, (loc1, glb)) :: stk) as stk'''.
-      clear dependent stk.
-      rename stk''' into stk.
-      destruct stk'; [inversion H2 |].
-      destruct H2.
-      * inversion H2; subst.
-        inversion H1; subst.
-        exists f. tauto.
-      * inversion H1; subst.
-        pose proof IHclos_refl_trans_n1 c l st p stk' stk'' eq_refl H2.
-        exact H4.
-    + destruct stk'; [inversion H2 |].
-      destruct H2.
-      * inversion H2; subst.
-        inversion H1; subst.
-        pose proof IHclos_refl_trans_n1 c (Some l2) (loc2, glb2) p ((c1, None, (loc1, glb1)) :: (c, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_eq _ _)).
-        exact H2.
-      * inversion H1; subst.
-        pose proof IHclos_refl_trans_n1 c l st p ((c1, None, (loc1, glb1)) :: (c2, Some l2, (loc2, glb2)) :: stk') stk'' (eq_refl _) (in_cons _ _ _ (in_cons _ _ _ H2)).
-        exact H3.
-Qed.
-
-Theorem reentry_invariant :
+(** Lemma 5.5 *)
+Lemma reentry_invariant_precondition:
   forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion),
 
   (forall i x, globalp (invs i x) /\ localp (loc_R i x)) ->
@@ -641,38 +718,17 @@ Theorem reentry_invariant :
         exists z, invs {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st /\ loc_R {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st) ->
   func_triple' fc f P Q invs' invs') ->
 
-  func_triple fc lf P f Q.
+  forall stk1 st2 p',
+    stk_to_pre fc lf f pt invs loc_R R stk1 P Q ->
+    multi_ceval' fc lf (p' :: nil) stk1 ->
+    multi_ceval' fc lf stk1 ((func_bdy f, None, st2) :: nil) ->
+    Q st2.
 Proof.
-  intros.
-  rename H into Ginv.
-  rename H0 into H.
-  rename H1 into H0.
-  unfold func_triple.
-  intros.
-  apply ceval_multi_ceval' in H1.
-
-  remember ((func_bdy f, Some (com_to_label_pure (func_bdy f)), st1) :: nil) as stk1.
-  (* Generalized precondition *)
-  assert (stk_to_pre fc lf f pt invs loc_R R stk1 P Q).
-  {
-    subst. simpl.
-    left.
-    split.
-    apply com_to_label_pure_is_pure.
-    exact H2.
-  }
-  remember (func_bdy f, Some (com_to_label_pure (func_bdy f)), st1) as p'.
-  assert (multi_ceval' fc lf (p' :: nil) stk1) as Hfront.
-  {
-    subst.
-    apply rt_refl.
-  }
-  clear dependent st1.
-  clear Heqstk1.
-
+  intros ? ? ? ? ? ? ? ? ? Ginv ? ? ? ? ? H3 Hfront H1.
+  revert H1 H3 Hfront.
+  intros H1 H3 Hfront.
   apply Operators_Properties.clos_rt_rt1n in H1.
   remember ((func_bdy f, None, st2) :: nil) as stk2.
-(*   revert dependent f. *)
   induction H1; intros; subst.
   - simpl in H3. exact H3.
   - apply Operators_Properties.clos_rt1n_rt in H2.
@@ -781,4 +837,54 @@ Proof.
     }
 Qed.
 
-Print Assumptions reentry_invariant.
+(** Theorem 5.4: Derivation Theorem *)
+Theorem derivation_theorem:
+  forall (fc : func_context) (lf : list func) (f : func) (pt : param_type fc (f :: lf)) (invs loc_R : invariants fc (f :: lf) pt) (R : index_relation fc (f :: lf) pt) (P Q : Assertion),
+
+  (forall i x, globalp (invs i x) /\ localp (loc_R i x)) ->
+
+  (* Rule 1 *)
+  (forall f' (Hin: In f' lf) (i: index_set fc (f :: lf)) (x: pt i) invs',
+    (invs' = fun j st =>
+        exists y, R i {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} x y 
+        /\ invs {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st /\ loc_R {| fname := f'; fvalid := in_cons _ _ _ Hin; index_label := j |} y st) ->
+  func_triple' fc f' (invs i x) (invs i x) invs' invs') ->
+
+  (* Rule 2 *)
+  (forall (invs' : FUN.rAssertion fc f),
+    (invs' = fun j st =>
+        exists z, invs {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st /\ loc_R {| fname := f; fvalid := in_eq f lf ; index_label := j|} z st) ->
+  func_triple' fc f P Q invs' invs') ->
+
+  func_triple fc lf P f Q.
+Proof.
+  intros.
+  rename H into Ginv.
+  rename H0 into H.
+  rename H1 into H0.
+  unfold func_triple.
+  intros.
+  apply ceval_multi_ceval' in H1.
+
+  remember ((func_bdy f, Some (com_to_label_pure (func_bdy f)), st1) :: nil) as stk1.
+  (* Generalized precondition *)
+  assert (stk_to_pre fc lf f pt invs loc_R R stk1 P Q).
+  {
+    subst. simpl.
+    left.
+    split.
+    apply com_to_label_pure_is_pure.
+    exact H2.
+  }
+  remember (func_bdy f, Some (com_to_label_pure (func_bdy f)), st1) as p'.
+  assert (multi_ceval' fc lf (p' :: nil) stk1) as Hfront.
+  {
+    subst.
+    apply rt_refl.
+  }
+  apply reentry_invariant_precondition with fc lf f pt invs loc_R R P stk1 p'; auto.
+Qed.
+(** [] *)
+
+Print Assumptions derivation_theorem.
+End DerivationTheorem.

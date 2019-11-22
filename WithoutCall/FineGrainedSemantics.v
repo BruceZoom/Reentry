@@ -1,5 +1,6 @@
+From Reentry Require Import DenotationalSemantics.
+
 Require Import Coq.Lists.List.
-Require Import AST_woc.
 Require Import Omega.
 
 Require Import Coq.Relations.Relation_Operators.

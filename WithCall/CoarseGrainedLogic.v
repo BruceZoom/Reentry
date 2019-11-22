@@ -1,7 +1,8 @@
-Require Import Coq.Lists.List.
-Require Import AST_wc.
-Require Import Hoare_wc.
+From Reentry Require Import DenotationalSemantics.
+From Reentry Require Import DerivationTheorem.
+Import AssertionLanguage.
 
+Require Import Coq.Lists.List.
 Require Import Omega.
 
 Require Import Coq.Relations.Relation_Operators.
@@ -12,6 +13,7 @@ Arguments clos_refl_trans_n1 {A} _ _ _.
 
 Require Import FunctionalExtensionality.
 
+(** Auxiliary Semantics *)
 Fixpoint iter_loop_body (b : bexp) (loop_body : state -> state -> Prop) (n : nat): state -> state -> Prop :=
   match n with
   | O => fun st1 st2 => st1 = st2 /\ beval st1 b = false
@@ -66,14 +68,12 @@ Inductive ceval' (sigma : semantic) (fc : func_context) (lf : public_funcs) : co
       ceval' sigma fc lf CReentry (loc, glb1) (loc, glb2)
 with arbitrary_eval' (sigma: semantic) (fc: func_context) (lf: public_funcs): unit_state -> unit_state -> Prop :=
   | ArE'_nil: forall gl, arbitrary_eval' sigma fc lf gl gl
-(*   | ArE'_cons: forall loc loc1 loc2 gl1 gl2 gl3 f, *)
   | ArE'_cons: forall loc pv gl1 gl2 gl3 f,
       In f lf ->
-(*       sigma fc lf (func_bdy f) (loc1, gl1) (loc2, gl2) -> *)
       ceval' sigma fc lf (CCall f pv) (loc, gl1) (loc, gl2) ->
       arbitrary_eval' sigma fc lf gl2 gl3 ->
       arbitrary_eval' sigma fc lf gl1 gl3.
-
+(** [] *)
 
 Module FixpointSigma.
 Fixpoint sg (n : nat) : semantic :=
@@ -443,7 +443,6 @@ Notation "fc lf |== tr" := (valid fc lf tr) (at level 91, no associativity).
 
 Definition fp_valid (sigma: semantic) (fc : func_context) (lf : public_funcs) (fp : func_predicate) : Prop :=
   forall f P Q,
-(*     fp f P Q -> P st1 -> ceval fc lf (func_bdy f) st1 st2 -> Q st2. *)
     fp f P Q -> triple_valid sigma fc lf ({{P}} (func_bdy f) {{Q}}).
 Notation "sigma fc lf ||== fp" := (fp_valid sigma fc lf fp) (at level 91, no associativity).
 
@@ -701,6 +700,7 @@ Proof.
     apply H4.
 Qed.
 
+Print Assumptions hoare_sound.
 End Soundness.
 (** [] *)
 
@@ -1069,10 +1069,7 @@ Proof.
     apply hoare_triple_complete; auto.
   }
 Qed.
+
+Print Assumptions hoare_complete.
 End Completeness.
 (** [] *)
-
-Import Soundness.
-Import Completeness.
-Print Assumptions hoare_sound.
-Print Assumptions hoare_complete.

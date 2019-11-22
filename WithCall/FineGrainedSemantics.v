@@ -1,5 +1,6 @@
+From Reentry Require Import DenotationalSemantics.
+
 Require Import Coq.Lists.List.
-Require Import AST_wc.
 Require Import Omega.
 
 Require Import Coq.Relations.Relation_Operators.
@@ -147,15 +148,20 @@ Ltac destruct_rev stk :=
 
 
 (** Definition of basic ceval' *)
-(* Calling stacks are ordered top-down, i.e. outer call state at stack top *)
+(*
+  We redefine the label and state for the version with regular function calls to consider the function calling stack.
+  label -> label stack (lbstk):
+    We need to propogate the reentry point in the inner function call to the outer function calls. Thus we use a stack of labels to mark a single reentry point.
+  local state -> local state stack (lcstk):
+    We need to use stack to store local states to be able to restore program state when context switching.
+  state -> state':
+    Same reason as the above.
+*)
 (* label calling stack *)
 Definition lbstk : Type := list label.
 (* local calling stack *)
 Definition lcstk : Type := list unit_state.
 Definition state' : Type := lcstk (* local *) * unit_state (* global *).
-
-Definition pure_stk (bstk : lbstk) : Prop :=
-  forall lb, In lb bstk -> is_pure lb.
 
 Inductive ceval' : func_context -> com -> lbstk -> lbstk -> state' -> state' -> Prop :=
   | E'_Skip : forall fc loc glb,
