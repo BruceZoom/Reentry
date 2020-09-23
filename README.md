@@ -29,7 +29,7 @@ We provide a Makefile to compile two versions of our formalizations: with functi
 _Running any of the above command will remove all existing compiled files in the current directory to avoid name conflicts._
 For the same reason, we do not allow `make all`.
 
-You may need to set up your own CONFIGURE file to the bin directory of Coq to compile files.
+_You may need to set up your own CONFIGURE file to the bin directory of Coq to compile files._
 
 ## __Catalogue__
 ### __WithCall__
